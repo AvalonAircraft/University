@@ -49,7 +49,7 @@
 # 2) AWS Zugriff einrichten
 # --------------------------------------------------------------------
 # Option A: AWS Profile
-aws configure --profile myprofile
+'aws configure --profile myprofile'
 export AWS_PROFILE="myprofile"
 
 # Region-Defaults:
