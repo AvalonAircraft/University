@@ -9,7 +9,7 @@
 # WARNUNG: Das Deployment erzeugt AWS Ressourcen (Kosten!). Vor allem: Aurora, NAT, CloudFront, Logs, etc.
 #
 # --------------------------------------------------------------------
-# 0) Stack-Ordner (bei dir vorhanden)
+# 0) Stack-Ordner 
 # --------------------------------------------------------------------
 # apigw
 # aurora-mysql
@@ -68,7 +68,7 @@ cd University-main
 # --------------------------------------------------------------------
 # 4) WICHTIG: Platzhalter/Defaults finden & überschreiben
 # --------------------------------------------------------------------
-# In deinen Stacks sind teils Defaults (Domains/Account IDs/etc.) gesetzt.
+# In den Stacks sind teils Defaults (Domains/Account IDs/etc.) gesetzt.
 # Best Practice: Lege in JEDEM Stack eine eigene terraform.tfvars an und überschreibe dort die Werte.
 #
 # Schnelles Suchen nach author-spezifischen Strings/IDs:
@@ -161,7 +161,7 @@ terraform -chdir=stacks/network init
 terraform -chdir=stacks/network plan
 terraform -chdir=stacks/network apply
 
-# Wichtige Outputs (dein network Stack outputtet diese Keys):
+# Wichtige Outputs (der network Stack outputtet diese Keys):
 VPC_ID=$(terraform -chdir=stacks/network output -raw vpc_id)
 SUBNET_PUBLIC1=$(terraform -chdir=stacks/network output -raw subnet_public1_id)
 SUBNET_PUBLIC2=$(terraform -chdir=stacks/network output -raw subnet_public2_id)
@@ -329,7 +329,7 @@ terraform -chdir=stacks/aurora-mysql apply
 # --------------------------------------------------------------------
 # 16) C) S3 (optional/empfohlen) — stacks/s3
 # --------------------------------------------------------------------
-# Dein S3 Stack hat Defaults für cloudfront_distribution_arns, logs_account_id etc. die author-spezifisch sein können.
+# Der S3 Stack hat Defaults für cloudfront_distribution_arns, logs_account_id etc. die author-spezifisch sein können.
 # Wenn du erstmal nur einen Bucket brauchst: setze diese Werte auf leer/neutral.
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 S3_BUCKET_NAME="university-bucket-${ACCOUNT_ID}-${AWS_REGION}"
@@ -421,7 +421,7 @@ done
 # --------------------------------------------------------------------
 # 20) D) StepFunctions — stacks/stepfunctions/* (+ IAM Roles + LogGroups)
 # --------------------------------------------------------------------
-# Deine StepFunctions Stacks erwarten:
+# Die StepFunctions Stacks erwarten:
 # - existing_role_arn (aus passenden IAM stacks unter stacks/iam/stepfunctions/*-role)
 # - log_group_name (CloudWatch Log Group muss existieren)
 #
