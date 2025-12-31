@@ -7,10 +7,9 @@ und wiederverwendbare Module unter `modules/`.
 #
 >[!WARNING]
 WARNUNG: Das Deployment erzeugt AWS Ressourcen (Kosten!). Vor allem: Aurora, NAT, CloudFront, Logs, etc.
-#
-# --------------------------------------------------------------------
+---
 ## 0) Stack-Ordner 
-# --------------------------------------------------------------------
+---
 - **apigw** 
 - **aurora-mysql**
 - **cdn**
