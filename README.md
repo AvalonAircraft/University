@@ -467,22 +467,25 @@ echo "LAMBDA_2_INVOKE_ARN=$LAMBDA_2_INVOKE_ARN"
 ---
 >[!NOTE]
 `apigw` erwartet: `existing_lambda_function_arn_1/2` **+** `existing_lambda_invoke_arn_1/2` **+** `existing_s3_bucket_name`
+
+LAMBDA_AGENT_ARN=$(terraform -chdir=stacks/lambda/lambda_AgentControlHandler output -raw lambda_function_arn)
+LAMBDA_AURORA_ARN=$(terraform -chdir=stacks/lambda/lambda6 output -raw lambda_function_arn)
+
+
 ```bash
 cat > stacks/apigw/terraform.tfvars <<EOF
 region = "ap-northeast-2"
-existing_lambda_function_arn_1 = "${LAMBDA_1_ARN}"
-existing_lambda_invoke_arn_1   = "${LAMBDA_1_INVOKE_ARN}"
-existing_lambda_function_arn_2 = "${LAMBDA_2_ARN}"
-existing_lambda_invoke_arn_2   = "${LAMBDA_2_INVOKE_ARN}"
-existing_s3_bucket_name        = "${S3_BUCKET_NAME}"
+lambda_arn_agent  = "${LAMBDA_AGENT_ARN}"
+lambda_arn_aurora = "${LAMBDA_AURORA_ARN}"
+s3_bucket_name    = "${S3_BUCKET_NAME}"
 EOF
 
 terraform -chdir=stacks/apigw init
 terraform -chdir=stacks/apigw plan
 terraform -chdir=stacks/apigw apply
 
-API_URL=$(terraform -chdir=stacks/apigw output -raw api_invoke_url)
-echo "API_URL=$API_URL"
+API_URL=$(terraform -chdir=stacks/apigw output -raw invoke_url)
+echo "API_URL=${API_URL}"
 ```
 >[!NOTE]
 **Test:**  
@@ -507,20 +510,18 @@ done
 ---
 >[!NOTE]
 Die StepFunctions Stacks erwarten:
->- `existing_role_arn` (aus passenden IAM stacks unter `stacks/iam/stepfunctions/*-role`)
->- `log_group_name` (CloudWatch Log Group muss existieren)
+>- AgentStepFunction & StepFunction3 brauchen existing_log_group_arn (extern / vorher erzeugen)
+>- AgentStepFunction2 kann Log Group selbst erzeugen (create_log_group = true)
 #
 ### 20.1 IAM StepFunctions Rollen deployen (falls noch nicht gemacht)
 ```bash
-find stacks/iam -type f -name "*.tf" -print0 \
-  | xargs -0 -n1 dirname \
-  | sort -u \
-  | while read -r d; do
-      echo "=== IAM APPLY: $d ==="
-      terraform -chdir="$d" init
-      terraform -chdir="$d" plan
-      terraform -chdir="$d" apply
-    done
+for d in stacks/iam/stepfunctions/*; do
+  [ -d "$d" ] || continue
+  echo "=== IAM STEPFUNCTION ROLE APPLY: $d ==="
+  terraform -chdir="$d" init
+  terraform -chdir="$d" plan
+  terraform -chdir="$d" apply
+done
 ```
 #
 ### 20.2 Log Groups anlegen (Beispiel)
