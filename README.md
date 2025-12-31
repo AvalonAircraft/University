@@ -32,7 +32,7 @@ WARNUNG: Das Deployment erzeugt AWS Ressourcen (Kosten!). Vor allem: Aurora, NAT
 - **vpc**
 #
 >[!IMPORTANT]
-WICHTIG: Du brauchst NICHT alles.
+WICHTIG: Du brauchst **NICHT** alles.
 
 - **Org/Admin-only:** organizations, org-billing, iam-identity-center (nur Management Account)
 - **Networking:** entweder network (empfohlen) ODER vpc + security_groups
@@ -44,7 +44,9 @@ WICHTIG: Du brauchst NICHT alles.
 - **`Git`**
 - **`Terraform >= 1.5`**
 - **`AWS CLI v2`**
-# - Optional: Docker (nur für ECS/ECR, wenn du Container pushen willst)
+
+
+- Optional: Docker (nur für ECS/ECR, wenn du Container pushen willst)
 #
 ---
 ## 2) AWS Zugriff einrichten
@@ -53,38 +55,43 @@ WICHTIG: Du brauchst NICHT alles.
 - `aws configure --profile myprofile`  
 - `export AWS_PROFILE="myprofile"`
 
-# Region-Defaults:
-# - Workloads (VPC/ECS/Lambda/etc.) typischerweise z.B. ap-northeast-2
-# - CloudFront ACM Zertifikate müssen i.d.R. in us-east-1 angelegt werden (für stacks/cdn)
+**Region-Defaults:**
+- Workloads (VPC/ECS/Lambda/etc.) typischerweise z.B. `ap-northeast-2`
+- CloudFront ACM Zertifikate müssen i.d.R. in `us-east-1` angelegt werden (für `stacks/cdn`)
 - `export AWS_REGION="ap-northeast-2"`
 - `aws sts get-caller-identity`
-
+#
 ---
 ## 3) Repo klonen
 ---
 - `git clone <REPO_URL>`
 - `cd University-main`
+#
 ---
+## 4) Platzhalter/Defaults
+
 >[!IMPORTANT]
 WICHTIG: Platzhalter/Defaults finden & überschreiben
----
-In den Stacks sind teils Defaults (Domains/Account IDs/etc.) gesetzt.  
-  
-**Best Practice:**  
-Lege in **JEDEM** Stack eine eigene terraform.tfvars an und überschreibe dort die Werte.
-#
-**Schnelles Suchen nach author-spezifischen Strings/IDs:**
-`grep -R "miraedrive\|186261963982\|arn:aws:iam::\|E[0-9A-Z]\{10,\}\|sg-" -n stacks modules | head -n 200`
+>
+>In den Stacks sind teils Defaults (Domains/Account IDs/etc.) gesetzt.  
 
+>[!NOTE]
+**Best Practice:**
+>Lege in **JEDEM** Stack eine eigene `terraform.tfvars` an und überschreibe dort die Werte.
+
+**Schnelles Suchen nach author-spezifischen Strings/IDs:**
+
+- `grep -R "miraedrive\|186261963982\|arn:aws:iam::\|E[0-9A-Z]\{10,\}\|sg-" -n stacks modules | head -n 200`
+#
 ---
 ## 5) Terraform Standard-Workflow (pro Stack)
 ---
-- `terraform -chdir=stacks/<stack> init`
-- `terraform -chdir=stacks/<stack> plan`
-- `terraform -chdir=stacks/<stack> apply`
-#
-# Outputs ansehen:
-# terraform -chdir=stacks/`<stack>` output
+**1)** `terraform -chdir=stacks/<stack> init`  
+**2)** `terraform -chdir=stacks/<stack> plan`  
+**3)** `terraform -chdir=stacks/<stack> apply`  
+
+**Outputs ansehen:**
+- `terraform -chdir=stacks/<stack> output`
 #
 ---
 ## 6) EMPFOHLENE Deploy-Reihenfolge (voll)
@@ -93,11 +100,11 @@ Lege in **JEDEM** Stack eine eigene terraform.tfvars an und überschreibe dort d
 **1)** `stacks/organizations`  
 **2)** `stacks/org-billing`  
 **3)** `stacks/iam-identity-center`  
-#
+
 ### B) NETWORKING (wähle EINE Variante)
 **Variante 1 (empfohlen):** `stacks/network`  
 **Variante 2:** `stacks/vpc` **->** `stacks/security_groups`  
-#
+
 ### C) [CORE](#core)
 **1)** `stacks/kms/tenant-master-key`  
 **2)** `stacks/nlb`  
@@ -106,17 +113,18 @@ Lege in **JEDEM** Stack eine eigene terraform.tfvars an und überschreibe dort d
 **5)** `stacks/ecs`  
 **6)** `stacks/aurora-mysql` (optional)  
 **7)** `stacks/s3` (optional/empfohlen)  
-#
+
 ### D) SERVERLESS / API / EVENTS / WORKFLOWS
 **1)** `stacks/lambda/*`  
 **2)** `stacks/apigw`  
 **3)** `stacks/eventbridge/*`  
 **4)** `stacks/stepfunctions/*` (+ passende IAM Roles + Log Groups)  
 **5)** `stacks/ses` (optional)  
-#
+
 ### E) DOMAIN/CDN (optional; benötigt echte Domain)
 **1)** `stacks/dns`  
 **2)** `stacks/cdn`  
+
 #
 ---
 ## 7) A) ORG/ADMIN-ONLY STACKS (optional!)
@@ -124,59 +132,70 @@ Lege in **JEDEM** Stack eine eigene terraform.tfvars an und überschreibe dort d
 >[!NOTE]
 NUR ausführen, wenn du im AWS Organizations **MANAGEMENT ACCOUNT** bist und wirklich `Accounts/OUs/Billing/SSO` setzen willst.
 >Du MUSST hier eigene E-Mails, Account-Namen etc. setzen – NICHT die Defaults benutzen.
+
 #
 ### 7.1 organizations
+```bash
 cat > stacks/organizations/terraform.tfvars <<'EOF'
+EOF
+```
 >[!NOTE]
 Beispiel – **DU MUSST HIER DEINE EIGENEN WERTE SETZEN**  
 >org_name = "my-org"  
 >accounts = [...]  
-
-EOF  
-
-- `terraform -chdir=stacks/organizations init`  
-- `terraform -chdir=stacks/organizations plan`  
-- `terraform -chdir=stacks/organizations apply`  
+  
+```bash
+terraform -chdir=stacks/organizations init  
+terraform -chdir=stacks/organizations plan  
+terraform -chdir=stacks/organizations apply
+```
 #
 ### 7.2 org-billing
+```bash
 cat > stacks/org-billing/terraform.tfvars <<'EOF'
+EOF
+```
 >[!NOTE]
 Beispiel – **EIGENE** Billing-Konfiguration
-
-EOF  
-
-- `terraform -chdir=stacks/org-billing init`  
-- `terraform -chdir=stacks/org-billing plan`  
-- `terraform -chdir=stacks/org-billing apply`
+  
+```bash
+terraform -chdir=stacks/org-billing init
+terraform -chdir=stacks/org-billing plan
+terraform -chdir=stacks/org-billing apply
+```
 #
 ### 7.3 iam-identity-center
+```bash
 cat > stacks/iam-identity-center/terraform.tfvars <<'EOF'
+EOF
+```
 >[!NOTE]
 Beispiel – **EIGENE** SSO User/Groups/Assignments  
-
-EOF  
-
-- `terraform -chdir=stacks/iam-identity-center init`
-- `terraform -chdir=stacks/iam-identity-center plan`
-- `terraform -chdir=stacks/iam-identity-center apply`
-
+  
+```bash
+terraform -chdir=stacks/iam-identity-center init
+terraform -chdir=stacks/iam-identity-center plan
+terraform -chdir=stacks/iam-identity-center apply
+```
 >[!NOTE]
 Wenn du das nicht brauchst: diese 3 Stacks einfach überspringen.
 #
 ---
-## 8) B) NETWORKING — Variante 1 (empfohlen): stacks/network
+## 8) B) NETWORKING — Variante 1 (empfohlen): `stacks/network`
 ---
+```bash
 cat > stacks/network/terraform.tfvars <<'EOF'
 region = "ap-northeast-2"
 EOF
 
-- `terraform -chdir=stacks/network init`
-- `terraform -chdir=stacks/network plan`
-- `terraform -chdir=stacks/network apply`
-
+terraform -chdir=stacks/network init
+terraform -chdir=stacks/network plan
+terraform -chdir=stacks/network apply
+```
 >[!IMPORTANT]
 Wichtige Outputs (der network Stack outputtet diese Keys):
 
+```bash
 VPC_ID=$(terraform -chdir=stacks/network output -raw vpc_id)
 SUBNET_PUBLIC1=$(terraform -chdir=stacks/network output -raw subnet_public1_id)
 SUBNET_PUBLIC2=$(terraform -chdir=stacks/network output -raw subnet_public2_id)
@@ -195,12 +214,14 @@ echo "SUBNET_PRIVATE2=$SUBNET_PRIVATE2"
 echo "SG_ECS_FARGATE=$SG_ECS_FARGATE"
 echo "SG_NLB_PRIVATELINK=$SG_NLB_PRIVATELINK"
 echo "SG_AURORA=$SG_AURORA"
+```
 #
 ---
 ## 9) B) NETWORKING — Variante 2: stacks/vpc + stacks/security_groups (Alternative)
 ---
 >[!NOTE]
 Nur nutzen, wenn du `stacks/network` NICHT nutzt.
+
 ```bash
 cat > stacks/vpc/terraform.tfvars <<'EOF'
 region = "ap-northeast-2"
@@ -227,7 +248,7 @@ SG_AURORA=$(terraform -chdir=stacks/security_groups output -raw sg_aurora_id)
 ```
 #
 ---
-## 10) C) KMS — stacks/kms/tenant-master-key
+## 10) C) KMS — `stacks/kms/tenant-master-key`
 ---
 ```bash
 cat > stacks/kms/tenant-master-key/terraform.tfvars <<'EOF'  
@@ -243,16 +264,18 @@ echo "TENANT_KMS_KEY_ARN=$TENANT_KMS_KEY_ARN"
 ```
 #
 ---
-## 11) C) NLB — stacks/nlb
+## 11) C) NLB — `stacks/nlb`
 ---
 >[!NOTE]
 Benötigt: public subnets + security group (nlb sg) aus `network/security_groups`
+
 ```bash
 cat > stacks/nlb/terraform.tfvars <<EOF  
-region = "ap-northeast-2"  
-subnet_ids = ["${SUBNET_PUBLIC1}", "${SUBNET_PUBLIC2}"]  
-security_group_id = "${SG_NLB_PRIVATELINK}"  
-EOF
+region = "ap-northeast-2"
+vpc_id = "${VPC_ID}"
+subnet_private1 = "${SUBNET_PRIVATE1}"
+subnet_private2 = "${SUBNET_PRIVATE2}"
+nlb_sg_id = "${SG_NLB_PRIVATELINK}"
 
 terraform -chdir=stacks/nlb init
 terraform -chdir=stacks/nlb plan
@@ -269,8 +292,8 @@ echo "NLB_DNS=$NLB_DNS"
 ---
 >[!NOTE]
 Diese Rollen werden z.B. von ECS referenziert (ECS Stack nutzt `Rollen-NAMEN`):
-> - agentTaskRole
-> - ecsTaskExecutionRole-ai-agent
+> - `agentTaskRole`
+> - `ecsTaskExecutionRole-ai-agent`
 #
 **Deploye die IAM Substacks, die du brauchst (oder alle).**
 ```bash
@@ -288,6 +311,7 @@ done
 ---
 >[!NOTE]
 Default `kms_key_arn` im Stack ist author-spezifisch -> hier überschreiben!
+
 ```bash
 ECR_REPO_NAME="ai-agent"
 
@@ -301,7 +325,7 @@ terraform -chdir=stacks/ecr init
 terraform -chdir=stacks/ecr plan
 terraform -chdir=stacks/ecr apply
 
-ECR_URI=$(terraform -chdir=stacks/ecr output -raw ecr_repository)
+ECR_URI=$(terraform -chdir=stacks/ecr output -raw repository_url)
 echo "ECR_URI=$ECR_URI"
 ```
 #
@@ -310,10 +334,10 @@ echo "ECR_URI=$ECR_URI"
 ---
 >[!NOTE]
 Dieser Stack erwartet u.a.:
-> - subnet_ids (private)
-> - security_group_id (ECS SG)
-> - target_group_arn (von NLB)
-> - container_image (aus ECR)
+> - `subnet_ids` (private)
+> - `security_group_id` (ECS SG)
+> - `target_group_arn` (von NLB)
+> - `container_image` (aus ECR)
 #
 >[!IMPORTANT]
 WICHTIG: Du musst ein Image in dieses ECR pushen, sonst läuft ECS zwar, aber Container kann fehlschlagen.
@@ -350,7 +374,7 @@ terraform -chdir=stacks/ecs apply
 >[!NOTE]
 Dieser Stack nutzt das aurora-mysql Modul und erstellt DB + Secret in Secrets Manager.
 >
->Benötigt: vpc_id, subnet_ids (private), security_group_ids (Aurora SG)
+>Benötigt: `vpc_id`, `subnet_ids` (private), `security_group_ids` (Aurora SG)
 ```bash
 cat > stacks/aurora-mysql/terraform.tfvars <<EOF
 region = "ap-northeast-2"
@@ -371,7 +395,8 @@ terraform -chdir=stacks/aurora-mysql apply
 ---
 
 >[!NOTE]
-Der S3 Stack hat Defaults für cloudfront_distribution_arns, logs_account_id etc. die author-spezifisch sein können.  
+Der S3 Stack hat Defaults für `cloudfront_distribution_arns`, `logs_account_id` etc. die author-spezifisch sein können.
+> 
 >Wenn du erstmal nur einen Bucket brauchst: setze diese Werte auf leer/neutral.
 
 ```bash
@@ -414,10 +439,11 @@ for d in stacks/lambda/*; do
 done
 ```
 >[!NOTE]
-APIGW benötigt 2 Lambda ARNs + 2 Invoke-ARNs (API Gateway Integration URI).  
+APIGW benötigt 2 Lambda ARNs + 2 Invoke-ARNs (API Gateway Integration URI).
+>
 >Das Repo liefert die Invoke-ARNs NICHT als Output in den Lambda Stacks, daher bauen wir sie so:
->- LAMBDA_ARN:     bekommst du via AWS CLI (FunctionArn)
->- LAMBDA_INVOKE:  "arn:aws:apigateway:${REGION}:lambda:path/2015-03-31/functions/${LAMBDA_ARN}/invocations"
+>- `LAMBDA_ARN`:     bekommst du via AWS CLI (FunctionArn)
+>- `LAMBDA_INVOKE`:  `"arn:aws:apigateway:${REGION}:lambda:path/2015-03-31/functions/${LAMBDA_ARN}/invocations"`
 
 **Beispiel (ersetze Function Names durch DEINE Funktionen, die du an `/agent` & `/query` hängen willst):**  
 ```bash
@@ -460,8 +486,8 @@ echo "API_URL=$API_URL"
 ```
 >[!NOTE]
 **Test:**  
->- curl -i "${API_URL}/agent"
->- curl -i "${API_URL}/query"
+>- `curl -i "${API_URL}/agent"`
+>- `curl -i "${API_URL}/query"`
 #
 ---
 ## 19) D) EventBridge — `stacks/eventbridge/*`
@@ -481,18 +507,20 @@ done
 ---
 >[!NOTE]
 Die StepFunctions Stacks erwarten:
->- `existing_role_arn` (aus passenden IAM stacks unter stacks/iam/stepfunctions/*-role)
+>- `existing_role_arn` (aus passenden IAM stacks unter `stacks/iam/stepfunctions/*-role`)
 >- `log_group_name` (CloudWatch Log Group muss existieren)
 #
 ### 20.1 IAM StepFunctions Rollen deployen (falls noch nicht gemacht)
 ```bash
-for d in stacks/iam/stepfunctions/*; do
-  [ -d "$d" ] || continue
-  echo "=== IAM STEPFUNCTION ROLE APPLY: $d ==="
-  terraform -chdir="$d" init
-  terraform -chdir="$d" plan
-  terraform -chdir="$d" apply
-done
+find stacks/iam -type f -name "*.tf" -print0 \
+  | xargs -0 -n1 dirname \
+  | sort -u \
+  | while read -r d; do
+      echo "=== IAM APPLY: $d ==="
+      terraform -chdir="$d" init
+      terraform -chdir="$d" plan
+      terraform -chdir="$d" apply
+    done
 ```
 #
 ### 20.2 Log Groups anlegen (Beispiel)
@@ -534,15 +562,15 @@ Wiederhole analog für:
 ## 21) D) SES — `stacks/ses` (optional; Domain + Route53 erforderlich)
 ---
 >[!IMPORTANT]
-SES Stack benötigt hosted_zone_id + domain_name + s3_bucket_name.
+SES Stack benötigt `hosted_zone_id` **+** `domain_name` **+** `s3_bucket_name`.
 >
 >Empfohlene Reihenfolge für Domain-Setup: dns -> ses -> cdn (oder dns -> cdn -> ses je nach Setup).
 #
 ---
-## 22) E) DNS (Route53) — stacks/dns (optional; echte Domain)
+## 22) E) DNS (Route53) — `stacks/dns` (optional; echte Domain)
 ---
 >[!WARNING]
-Achtung: Default domain/records sind author-spezifisch. Du musst deine Domain setzen.
+Achtung: Default `domain/records` sind author-spezifisch. Du musst deine Domain setzen.
 
 **Beispiel: Erstmal nur Hosted Zone anlegen (ohne extra records):**
 ```bash
@@ -574,9 +602,9 @@ CloudFront ACM Zertifikate müssen i.d.R. in us-east-1 sein.
 
 >[!IMPORTANT]
 Du brauchst:
->- domain_name + www_domain_name
->- hosted_zone_id (aus dns)
->- s3_origin_bucket_name (dein bucket)
+>- `domain_name` **+** `www_domain_name`
+>- `hosted_zone_id` (aus dns)
+>- `s3_origin_bucket_name` (dein bucket)
 ```bash
 cat > stacks/cdn/terraform.tfvars <<EOF
 region = "us-east-1"
