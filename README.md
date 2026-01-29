@@ -118,26 +118,25 @@ WICHTIG: Platzhalter/Defaults finden & überschreiben
 
 ### C) [CORE](#core)
 **1)** `stacks/kms/tenant-master-key`  
-**2)** `stacks/nlb`  
-**3)** `stacks/iam` (Rollen)  
-**4)** `stacks/aurora-mysql` (optional)  
-**5)** `stacks/s3` (optional/empfohlen)  
+**2)** `stacks/iam` (Rollen)  
+**3)** `stacks/aurora-mysql` (optional)  
+**4)** `stacks/s3` (optional/empfohlen)  
 
 ### D) [OPTIONAL](#optional)
-**6)** `stacks/nlb`  # Nur wenn ecs genutzt wird
-**7)** `stacks/ecr` 
-**8)** `stacks/ecs`  
+**5)** `stacks/nlb`  # Nur wenn ecs genutzt wird
+**6)** `stacks/ecr` 
+**7)** `stacks/ecs`  
 
 ### E) SERVERLESS / API / EVENTS / WORKFLOWS
-**1)** `stacks/lambda/*`  
-**2)** `stacks/apigw`  
-**3)** `stacks/eventbridge/*`  
-**4)** `stacks/stepfunctions/*` (+ passende IAM Roles + Log Groups)  
-**5)** `stacks/ses` (optional)  
+**8)** `stacks/lambda/*`  
+**9)** `stacks/apigw`  
+**10)** `stacks/eventbridge/*`  
+**11)** `stacks/stepfunctions/*` (+ passende IAM Roles + Log Groups)  
+**12)** `stacks/ses` (optional)  
 
 ### F) DOMAIN/CDN (optional; benötigt echte Domain)
-**1)** `stacks/dns`  
-**2)** `stacks/cdn`  
+**13)** `stacks/dns`  
+**14)** `stacks/cdn`  
 
 #
 ---
@@ -650,9 +649,8 @@ for d in stacks/iam/stepfunctions/*; do
   terraform -chdir="$d" plan
   terraform -chdir="$d" apply
 done
-
-
 ```
+
 #
 ### 20.2 Log Groups anlegen (Beispiel)
 >[!NOTE] 
@@ -667,6 +665,7 @@ aws logs create-log-group --log-group-name "/aws/stepfunctions/QueryStepFunction
 #
 
 ### 20.3 StepFunctions deploy (auto-minimal tfvars, sonst skip)
+```bash
 for d in stacks/stepfunctions/*; do
   [ -d "$d" ] || continue
   ls "$d"/*.tf >/dev/null 2>&1 || continue
@@ -714,6 +713,7 @@ EOF
   terraform -chdir="$d" apply
 done
 ```
+
 >[!IMPORTANT]
 Wiederhole analog für:
 >- `stacks/stepfunctions/EmailGenerationStepFunction`
