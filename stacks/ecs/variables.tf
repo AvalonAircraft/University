@@ -11,7 +11,16 @@ variable "task_family"  { type = string, default = "fargate-agent-task" }
 
 # Container
 variable "container_name"  { type = string, default = "hr-agent" }
-variable "container_image" { type = string, default = "111111111111.dkr.ecr.us-east-1.amazonaws.com/tenant1/hr-agent:latest" }
+variable "container_image" {
+  type        = string
+  description = "Container image URI (public DockerHub/public.ecr.aws or private ECR)."
+  default     = "public.ecr.aws/nginx/nginx:latest"
+
+  validation {
+    condition     = length(trim(var.container_image)) > 0
+    error_message = "container_image must be a non-empty string."
+  }
+}
 variable "container_port"  { type = number, default = 8080 }
 
 # Fargate Sizing
