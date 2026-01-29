@@ -267,7 +267,13 @@ echo "TENANT_KMS_KEY_ARN=$TENANT_KMS_KEY_ARN"
 ## 11) C) NLB — `stacks/nlb`
 ---
 >[!NOTE]
-Benötigt: public subnets + security group (nlb sg) aus `network/security_groups`
+Dieser Stack erstellt einen internal Network Load Balancer (internal = true) in private subnets
+und hängt die Security Group SG_NLB_PRIVATELINK per aws_lb_security_group_attachment an (für PrivateLink/Inbound-Fluss).
+Benötigt: VPC_ID, SUBNET_PRIVATE1, SUBNET_PRIVATE2, SG_NLB_PRIVATELINK (aus stacks/network oder stacks/security_groups).
+
+>[!IMPORTANT]
+In stacks/nlb sind Default-Tags author-spezifisch (z.B. Projekt="MiraeDrive").
+Wenn du neutrale Werte willst, überschreibe tags in der terraform.tfvars.
 
 ```bash
 cat > stacks/nlb/terraform.tfvars <<EOF
@@ -276,6 +282,17 @@ vpc_id = "${VPC_ID}"
 subnet_private1 = "${SUBNET_PRIVATE1}"
 subnet_private2 = "${SUBNET_PRIVATE2}"
 nlb_sg_id = "${SG_NLB_PRIVATELINK}"
+
+# Optional: Default ist "dualstack". Wenn du kein IPv6 brauchst/willst:
+# ip_address_type = "ipv4"
+
+# Optional aber empfohlen: author-spezifische Default-Tags überschreiben
+tags = {
+  Project     = "University"
+  Environment = "Dev"
+  Type        = "NLB"
+  TenantID    = ""
+}
 EOF
 
 terraform -chdir=stacks/nlb init
@@ -287,6 +304,11 @@ NLB_DNS=$(terraform -chdir=stacks/nlb output -raw nlb_dns_name)
 echo "TARGET_GROUP_ARN=$TARGET_GROUP_ARN"
 echo "NLB_DNS=$NLB_DNS"
 ```
+
+>[!NOTE]
+Der Listener ist standardmäßig TCP:8080 und der NLB ist internal.
+Du erreichst NLB_DNS normalerweise nur aus dem VPC (z.B. aus einer ECS Task/EC2 im privaten Netz).
+>
 #
 ---
 ## 12) C) IAM — stacks/iam (Rollen)
