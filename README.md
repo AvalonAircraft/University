@@ -665,36 +665,48 @@ aws logs create-log-group --log-group-name "/aws/stepfunctions/ComplexQueryStepF
 aws logs create-log-group --log-group-name "/aws/stepfunctions/QueryStepFunction" --region "${AWS_REGION}" 2>/dev/null || true
 ```
 #
-### 20.3 StepFunctions deployen (du musst pro Stack tfvars setzen)  
 
-**Beispiel AgentStepFunction:**  
-```bash
+### 20.3 StepFunctions deploy (auto-minimal tfvars, sonst skip)
 for d in stacks/stepfunctions/*; do
   [ -d "$d" ] || continue
   ls "$d"/*.tf >/dev/null 2>&1 || continue
 
   echo "=== STEPFUNCTIONS APPLY: $d ==="
 
-  # Auto-create minimal terraform.tfvars if missing
+  # Erstellt minimale tfvars Datei wenn nicht vorhanden
   if [ ! -f "$d/terraform.tfvars" ]; then
-    VAR_COUNT=$(grep -R --include="*.tf" -E '^\s*variable\s+"' "$d" | wc -l | tr -d ' ')
-    HAS_REGION=$(grep -R --include="*.tf" -E '^\s*variable\s+"region"' "$d" >/dev/null 2>&1; echo $?)
-
-    if [ "$VAR_COUNT" -eq 0 ]; then
-      cat > "$d/terraform.tfvars" <<EOF
-# auto-generated (no variables defined)
-EOF
-      echo "  -> created $d/terraform.tfvars (empty)"
-    elif [ "$HAS_REGION" -eq 0 ] && [ "$VAR_COUNT" -eq 1 ]; then
+    # If this stack declares a region variable -> write it
+    if grep -R --include="*.tf" -nE '^\s*variable\s+"region"\s*{' "$d" >/dev/null 2>&1; then
       cat > "$d/terraform.tfvars" <<EOF
 region = "${AWS_REGION}"
 EOF
       echo "  -> created $d/terraform.tfvars (region only)"
     else
-      echo "  -> SKIP: $d braucht zusätzliche Variablen. Lege $d/terraform.tfvars manuell an."
-      echo "     Tipp: siehe Beispiel unten (role arn, log group name, etc.)"
-      continue
+      # create empty so terraform doesn't fail on missing file assumptions
+      cat > "$d/terraform.tfvars" <<EOF
+# auto-generated empty
+EOF
+      echo "  -> created $d/terraform.tfvars (empty)"
     fi
+  fi
+
+  # DEntdeckt benoetigte Variablen ohne defaults
+  REQ_VARS=$(awk '
+    $1=="variable" {gsub(/"/,"",$2); v=$2; invar=1; hasdef=0}
+    invar && $1=="default" {hasdef=1}
+    invar && $0 ~ /^}/ {if(!hasdef) print v; invar=0}
+  ' "$d"/*.tf 2>/dev/null | sort -u)
+
+  # Wenn vars existieren muss und tfvars definiert diese nicht, dann ueberspringe
+  MISSING=""
+  for v in $REQ_VARS; do
+    grep -qE "^\s*${v}\s*=" "$d/terraform.tfvars" || MISSING="$MISSING $v"
+  done
+
+  if [ -n "$MISSING" ]; then
+    echo "  -> SKIP: missing required vars:$MISSING"
+    echo "     create $d/terraform.tfvars and set them, then re-run."
+    continue
   fi
 
   terraform -chdir="$d" init
