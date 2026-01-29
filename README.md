@@ -270,21 +270,22 @@ echo "TENANT_KMS_KEY_ARN=$TENANT_KMS_KEY_ARN"
 Benötigt: public subnets + security group (nlb sg) aus `network/security_groups`
 
 ```bash
-cat > stacks/nlb/terraform.tfvars <<EOF  
+cat > stacks/nlb/terraform.tfvars <<EOF
 region = "ap-northeast-2"
 vpc_id = "${VPC_ID}"
 subnet_private1 = "${SUBNET_PRIVATE1}"
 subnet_private2 = "${SUBNET_PRIVATE2}"
 nlb_sg_id = "${SG_NLB_PRIVATELINK}"
+EOF
 
 terraform -chdir=stacks/nlb init
 terraform -chdir=stacks/nlb plan
 terraform -chdir=stacks/nlb apply
 
-TARGET_GROUP_ARN=$(terraform -chdir=stacks/nlb output -raw target_group_arn)  
-NLB_DNS=$(terraform -chdir=stacks/nlb output -raw nlb_dns_name)  
-echo "TARGET_GROUP_ARN=$TARGET_GROUP_ARN"  
-echo "NLB_DNS=$NLB_DNS"  
+TARGET_GROUP_ARN=$(terraform -chdir=stacks/nlb output -raw target_group_arn)
+NLB_DNS=$(terraform -chdir=stacks/nlb output -raw nlb_dns_name)
+echo "TARGET_GROUP_ARN=$TARGET_GROUP_ARN"
+echo "NLB_DNS=$NLB_DNS"
 ```
 #
 ---
@@ -411,6 +412,7 @@ bucket_name = "${S3_BUCKET_NAME}"
 neutralisieren (später ggf. echte Werte setzen)
 
 ```bash
+# Neutralisieren, falls du noch kein CloudFront/SES Logging verkabeln willst:
 cloudfront_distribution_arns = []
 logs_account_id = "${ACCOUNT_ID}"
 ses_account_id  = "${ACCOUNT_ID}"
