@@ -29,13 +29,15 @@ variable "memory" { type = number, default = 2048 }  # 2 GB
 
 # Networking
 variable "subnet_ids"        { type = list(string) }                    # IDs aus Network-Stack übergeben
-variable "security_group_id" { type = string, default = "sg-08eacce4ac5d0f575" } # ecs-fargate
-variable "assign_public_ip"  { type = bool, default = false }
+variable "security_group_id" {
+  type        = string
+  description = "ECS service security group id"
+}variable "assign_public_ip"  { type = bool, default = false }
 
 # Load Balancer Target Group
 variable "target_group_arn" {
-  type    = string
-  default = "arn:${data.aws_partition.current.partition}:elasticloadbalancing:${data.aws_region.current.name}:111111111111:targetgroup/fargate-nlb-targets/0123456789abcdef"
+  type        = string
+  description = "Target group ARN for the service"
 }
 
 # Logs
@@ -73,16 +75,23 @@ variable "container_environment" {
   type = map(string)
   default = {
     AWS_REGION          = "us-east-1"
+
+    # Bedrock Konfiguration bleibt drin
     BEDROCK_MODEL_ID    = "anthropic.claude-3-haiku-20240307-v1:0"
     DEFAULT_LANG        = "de"
-    EVENT_BUS_NAME      = "event-bus-miraedrive-2"
-    EVENT_DETAIL_TYPE   = "EmailAnalyzed"
-    EVENT_SOURCE        = "app.email-agent"
-    SEND_TO_EVENTBRIDGE = "1"
-    USE_BEDROCK         = "1"
+
+    # Integration-Flags default OFF, damit "deploy works" ohne Abhängigkeiten
+    USE_BEDROCK         = "0"
     USE_COMPREHEND      = "0"
+    SEND_TO_EVENTBRIDGE = "0"
+
+    # Optional: EventBridge defaults leer/neutral, damit nix hard-failt
+    EVENT_BUS_NAME      = ""
+    EVENT_DETAIL_TYPE   = ""
+    EVENT_SOURCE        = ""
   }
 }
+
 
 variable "tags" {
   type = map(string)
