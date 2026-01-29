@@ -266,14 +266,14 @@ echo "TENANT_KMS_KEY_ARN=$TENANT_KMS_KEY_ARN"
 ---
 ## 11) C) NLB — `stacks/nlb`
 ---
->[!NOTE]
-Dieser Stack erstellt einen internal Network Load Balancer (internal = true) in private subnets
-und hängt die Security Group SG_NLB_PRIVATELINK per aws_lb_security_group_attachment an (für PrivateLink/Inbound-Fluss).
-Benötigt: VPC_ID, SUBNET_PRIVATE1, SUBNET_PRIVATE2, SG_NLB_PRIVATELINK (aus stacks/network oder stacks/security_groups).
-
->[!IMPORTANT]
-In stacks/nlb sind Default-Tags author-spezifisch (z.B. Projekt="MiraeDrive").
-Wenn du neutrale Werte willst, überschreibe tags in der terraform.tfvars.
+> [!NOTE]
+> Dieser Stack erstellt einen **internal** Network Load Balancer (**internal = true**) in **PRIVATE** Subnetzen
+> und hängt eine Security Group per `aws_lb_security_group_attachment` an (relevant für PrivateLink / eingeschränkten Inbound-Flow).
+>
+> **Benötigt (aus `stacks/network` oder `stacks/vpc` + `stacks/security_groups`):**
+> - `VPC_ID`
+> - `SUBNET_PRIVATE1`, `SUBNET_PRIVATE2`
+> - `SG_NLB_PRIVATELINK`
 
 ```bash
 cat > stacks/nlb/terraform.tfvars <<EOF
@@ -283,10 +283,10 @@ subnet_private1 = "${SUBNET_PRIVATE1}"
 subnet_private2 = "${SUBNET_PRIVATE2}"
 nlb_sg_id = "${SG_NLB_PRIVATELINK}"
 
-# Optional: Default ist "dualstack". Wenn du kein IPv6 brauchst/willst:
+# Optional: Default ist dualstack
 # ip_address_type = "ipv4"
 
-# Optional aber empfohlen: author-spezifische Default-Tags überschreiben
+# Optional: Default-Tags im Stack sind author-spezifisch -> überschreiben empfohlen
 tags = {
   Project     = "University"
   Environment = "Dev"
@@ -301,14 +301,12 @@ terraform -chdir=stacks/nlb apply
 
 TARGET_GROUP_ARN=$(terraform -chdir=stacks/nlb output -raw target_group_arn)
 NLB_DNS=$(terraform -chdir=stacks/nlb output -raw nlb_dns_name)
+
 echo "TARGET_GROUP_ARN=$TARGET_GROUP_ARN"
 echo "NLB_DNS=$NLB_DNS"
 ```
-
 >[!NOTE]
-Der Listener ist standardmäßig TCP:8080 und der NLB ist internal.
-Du erreichst NLB_DNS normalerweise nur aus dem VPC (z.B. aus einer ECS Task/EC2 im privaten Netz).
->
+Der NLB ist internal. NLB_DNS ist i.d.R. nur aus dem VPC erreichbar (z.B. ECS Task/EC2 im privaten Netz).
 #
 ---
 ## 12) C) IAM — stacks/iam (Rollen)
@@ -418,22 +416,20 @@ terraform -chdir=stacks/aurora-mysql apply
 ---
 
 >[!NOTE]
-Der S3 Stack hat Defaults für `cloudfront_distribution_arns`, `logs_account_id` etc. die author-spezifisch sein können.
-> 
->Wenn du erstmal nur einen Bucket brauchst: setze diese Werte auf leer/neutral.
+Der S3 Stack hat Defaults für cloudfront_distribution_arns, logs_account_id etc., die author-spezifisch sein können.
+Wenn du erstmal nur einen Bucket brauchst: setze diese Werte auf leer/neutral.
 
 ```bash
+# Sicherstellen, dass AWS_REGION gesetzt ist (Workload-Region)
+: "${AWS_REGION:=ap-northeast-2}"
+
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 S3_BUCKET_NAME="university-bucket-${ACCOUNT_ID}-${AWS_REGION}"
 
 cat > stacks/s3/terraform.tfvars <<EOF
-region = "ap-northeast-2"
+region = "${AWS_REGION}"
 bucket_name = "${S3_BUCKET_NAME}"
-```
->[!IMPORTANT]
-neutralisieren (später ggf. echte Werte setzen)
 
-```bash
 # Neutralisieren, falls du noch kein CloudFront/SES Logging verkabeln willst:
 cloudfront_distribution_arns = []
 logs_account_id = "${ACCOUNT_ID}"
@@ -446,6 +442,9 @@ terraform -chdir=stacks/s3 init
 terraform -chdir=stacks/s3 plan
 terraform -chdir=stacks/s3 apply
 ```
+
+>[!NOTE]
+Bucket-Name ist global eindeutig. Falls der Name in seltenen Fällen schon existiert, ändere den Prefix (z.B. university-tf-...).
 #
 ---
 ## 17) D) Lambda — `stacks/lambda/*`
