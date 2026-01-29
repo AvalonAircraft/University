@@ -66,7 +66,7 @@ WICHTIG: Du brauchst **NICHT** alles.
 ```bash
 # Workload Region (VPC/ECS/Lambda/API GW etc.)
 : "${AWS_REGION:=us-east-1}"
-
+export AWS_REGION
 echo "AWS_REGION=$AWS_REGION"
 aws sts get-caller-identity
 ```
@@ -120,19 +120,22 @@ WICHTIG: Platzhalter/Defaults finden & überschreiben
 **1)** `stacks/kms/tenant-master-key`  
 **2)** `stacks/nlb`  
 **3)** `stacks/iam` (Rollen)  
-**4)** `stacks/ecr`  
-**5)** `stacks/ecs`  
-**6)** `stacks/aurora-mysql` (optional)  
-**7)** `stacks/s3` (optional/empfohlen)  
+**4)** `stacks/aurora-mysql` (optional)  
+**5)** `stacks/s3` (optional/empfohlen)  
 
-### D) SERVERLESS / API / EVENTS / WORKFLOWS
+### D) [OPTIONAL](#optional)
+**6)** `stacks/nlb`  # Nur wenn ecs genutzt wird
+**7)** `stacks/ecr` 
+**8)** `stacks/ecs`  
+
+### E) SERVERLESS / API / EVENTS / WORKFLOWS
 **1)** `stacks/lambda/*`  
 **2)** `stacks/apigw`  
 **3)** `stacks/eventbridge/*`  
 **4)** `stacks/stepfunctions/*` (+ passende IAM Roles + Log Groups)  
 **5)** `stacks/ses` (optional)  
 
-### E) DOMAIN/CDN (optional; benötigt echte Domain)
+### F) DOMAIN/CDN (optional; benötigt echte Domain)
 **1)** `stacks/dns`  
 **2)** `stacks/cdn`  
 
@@ -331,11 +334,13 @@ Diese Rollen werden z.B. von ECS referenziert (ECS Stack nutzt `Rollen-NAMEN`):
 ```bash
 for d in stacks/iam/*; do
   [ -d "$d" ] || continue
+  ls "$d"/*.tf >/dev/null 2>&1 || continue
   echo "=== IAM APPLY: $d ==="
   terraform -chdir="$d" init
   terraform -chdir="$d" plan
   terraform -chdir="$d" apply
 done
+
 ```
 #
 ---
@@ -592,11 +597,13 @@ terraform -chdir=stacks/apigw taint aws_api_gateway_deployment.deploy && terrafo
 ```bash
 for d in stacks/eventbridge/*; do
   [ -d "$d" ] || continue
+  ls "$d"/*.tf >/dev/null 2>&1 || continue
   echo "=== EVENTBRIDGE APPLY: $d ==="
   terraform -chdir="$d" init
   terraform -chdir="$d" plan
   terraform -chdir="$d" apply
 done
+
 ```
 #
 ---
@@ -609,13 +616,15 @@ Die StepFunctions Stacks erwarten:
 #
 ### 20.1 IAM StepFunctions Rollen deployen (falls noch nicht gemacht)
 ```bash
-for d in stacks/iam/stepfunctions/*; do
+for d in stacks/stepfunctions/*; do
   [ -d "$d" ] || continue
-  echo "=== IAM STEPFUNCTION ROLE APPLY: $d ==="
+  ls "$d"/*.tf >/dev/null 2>&1 || continue
+  echo "=== STEPFUNCTIONS APPLY: $d ==="
   terraform -chdir="$d" init
   terraform -chdir="$d" plan
   terraform -chdir="$d" apply
 done
+
 ```
 #
 ### 20.2 Log Groups anlegen (Beispiel)
