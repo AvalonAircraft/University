@@ -374,18 +374,43 @@ Dieser Stack erwartet u.a.:
 > - `subnet_ids` (private)
 > - `security_group_id` (ECS SG)
 > - `target_group_arn` (von NLB)
-> - `container_image` (aus ECR)
+> - `container_image` (**public ODER ECR**)
 #
 >[!IMPORTANT]
-WICHTIG: Du musst ein Image in dieses ECR pushen, sonst läuft ECS zwar, aber Container kann fehlschlagen.
+WICHTIG:
+- **Für Uni/Professor-Deploy ohne Docker:** Nutze **Option A (Public Image)** → kein ECR/Docker nötig.
+- **Wenn du dein eigenes Image willst:** Nutze **Option B (ECR + Docker Build/Push)**.
+
+### 14.1 Option A: Deploy OHNE Docker (Public Image)
+```bash
+# Beispiel Public Image (kein Docker Build, kein ECR Push nötig)
+CONTAINER_IMAGE="public.ecr.aws/docker/library/nginx:latest"
+# Alternativen:
+# CONTAINER_IMAGE="nginx:latest"  # DockerHub (wenn Pull erlaubt)
+# CONTAINER_IMAGE="public.ecr.aws/amazonlinux/amazonlinux:2023"
+
+cat > stacks/ecs/terraform.tfvars <<EOF
+region = "${AWS_REGION}"
+subnet_ids = ["${SUBNET_PRIVATE1}", "${SUBNET_PRIVATE2}"]
+security_group_id = "${SG_ECS_FARGATE}"
+target_group_arn = "${TARGET_GROUP_ARN}"
+container_image = "${CONTAINER_IMAGE}"
+EOF
+
+terraform -chdir=stacks/ecs init
+terraform -chdir=stacks/ecs plan
+terraform -chdir=stacks/ecs apply
+```
+>[!NOTE]
+Wenn du ein eigenes Agent-Image hast, kannst du später einfach container_image in der tfvars ändern.
 #
-### 14.1 Docker Login + Build + Push
+
+### 14.2 Option B: Deploy MIT Docker (ECR Login + Build + Push)
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-```
-**Beispiel: build aus Repository-Root (wenn du einen Dockerfile hast)**
-```bash
+
+# Build aus Repository-Root (wenn du einen Dockerfile hast)
 docker build -t "${ECR_REPO_NAME}:latest" .
 docker tag "${ECR_REPO_NAME}:latest" "${ECR_URI}:latest"
 docker push "${ECR_URI}:latest"
@@ -404,6 +429,7 @@ terraform -chdir=stacks/ecs init
 terraform -chdir=stacks/ecs plan
 terraform -chdir=stacks/ecs apply
 ```
+
 #
 ---
 ## 15) C) Aurora MySQL (optional) — `stacks/aurora-mysql`
