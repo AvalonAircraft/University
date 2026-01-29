@@ -45,6 +45,12 @@ WICHTIG: Du brauchst **NICHT** alles.
 - **`Terraform >= 1.5`**
 - **`AWS CLI v2`**
 
+>[!IMPORTANT]
+>Auch wenn manche Stacks einen Default für `region` haben:  
+>**Setze `region` IMMER explizit in jeder terraform.tfvars**, damit nichts unbemerkt in die falsche Region deployed.
+>
+>Ausnahme: `stacks/cdn` muss **immer** `us-east-1` sein (ACM/CloudFront).
+
 
 - Optional: Docker (nur für ECS/ECR, wenn du Container pushen willst)
 #
