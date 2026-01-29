@@ -468,20 +468,54 @@ echo "LAMBDA_2_INVOKE_ARN=$LAMBDA_2_INVOKE_ARN"
 ## 18) D) API Gateway (REST) — `stacks/apigw`
 ---
 >[!NOTE]
-`apigw` erwartet: `existing_lambda_function_arn_1/2` **+** `existing_lambda_invoke_arn_1/2` **+** `existing_s3_bucket_name`
+Dieser Stack verwendet das Modul modules/apigw_rest und erstellt eine REST API (EDGE) mit Stage prod und folgenden Routen:
+/aurora-db → Lambda Proxy (AWS_PROXY) auf lambda_arn_aurora (Methods: GET/POST/PUT/DELETE)
+/lambda-agent_handler → Lambda Proxy (AWS_PROXY) auf lambda_arn_agent (Methods: GET/POST/PUT/DELETE)
+/s3-storage/{proxy+} → S3 Service Integration auf s3://<bucket>/{proxy} (Methods: GET/PUT/DELETE)
 
+Required Inputs (MUSS gesetzt werden)
+stacks/apigw erwartet nur:
+lambda_arn_agent
+lambda_arn_aurora
+s3_bucket_name
+Optional (Defaults existieren, aber eigene Werte empfohlen):
+region (Default im Stack ist "us-east-1" → bitte explizit setzen)
+api_name
+api_description
+
+## 18.1 Lambda ARNs aus Terraform Outputs holen
+
+[!IMPORTANT]
+Wenn hier bereits author-spezifische Defaults/ARNs vorkommen: immer durch eigene Werte ersetzen.
+
+```bash
 LAMBDA_AGENT_ARN=$(terraform -chdir=stacks/lambda/lambda_AgentControlHandler output -raw lambda_function_arn)
 LAMBDA_AURORA_ARN=$(terraform -chdir=stacks/lambda/lambda6 output -raw lambda_function_arn)
 
+echo "LAMBDA_AGENT_ARN=$LAMBDA_AGENT_ARN"
+echo "LAMBDA_AURORA_ARN=$LAMBDA_AURORA_ARN"
+```
+
+## 18.2 terraform.tfvars erstellen
+
+[!IMPORTANT]
+Setze region explizit auf deine Workload-Region (z.B. ap-northeast-2), damit alles konsistent deployt wird.
 
 ```bash
 cat > stacks/apigw/terraform.tfvars <<EOF
-region = "ap-northeast-2"
-lambda_arn_agent  = "${LAMBDA_AGENT_ARN}"
-lambda_arn_aurora = "${LAMBDA_AURORA_ARN}"
-s3_bucket_name    = "${S3_BUCKET_NAME}"
-EOF
+region = "ap-northeast-2"                  # eigene Region setzen
+api_name = "GeneralGateway"                # optional: eigener Name
+api_description = "REST (EDGE) API"        # optional: eigene Beschreibung
 
+lambda_arn_agent  = "${LAMBDA_AGENT_ARN}"  # eigener Lambda ARN
+lambda_arn_aurora = "${LAMBDA_AURORA_ARN}" # eigener Lambda ARN
+s3_bucket_name    = "${S3_BUCKET_NAME}"    # eigener Bucket Name
+EOF
+```
+
+## 18.3 Deploy
+
+```bash
 terraform -chdir=stacks/apigw init
 terraform -chdir=stacks/apigw plan
 terraform -chdir=stacks/apigw apply
@@ -489,10 +523,34 @@ terraform -chdir=stacks/apigw apply
 API_URL=$(terraform -chdir=stacks/apigw output -raw invoke_url)
 echo "API_URL=${API_URL}"
 ```
->[!NOTE]
-**Test:**  
->- `curl -i "${API_URL}/agent"`
->- `curl -i "${API_URL}/query"`
+
+## 18.4 Test
+
+```bash
+# Lambda integrations
+curl -i "${API_URL}/aurora-db"
+curl -i "${API_URL}/lambda-agent_handler"
+Optional: S3 Integration testen (Beispiel)
+```
+
+```bash
+# PUT (Textdatei hochladen)
+curl -i -X PUT \
+  -H "Content-Type: text/plain" \
+  --data-binary "hello from apigw" \
+  "${API_URL}/s3-storage/test.txt"
+
+# GET
+curl -i "${API_URL}/s3-storage/test.txt"
+
+# DELETE
+curl -i -X DELETE "${API_URL}/s3-storage/test.txt"
+```
+
+[!NOTE]
+Wenn du Änderungen am API-Gateway (Routen/Integrationen) machst und Terraform nicht neu “deployed”, kannst du das Deployment neu erzwingen:
+terraform -chdir=stacks/apigw taint aws_api_gateway_deployment.deploy && terraform -chdir=stacks/apigw apply
+
 #
 ---
 ## 19) D) EventBridge — `stacks/eventbridge/*`
