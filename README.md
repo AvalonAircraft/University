@@ -467,6 +467,7 @@ Jede Untermappe unter stacks/lambda/* ist ein eigenes Terraform-Projekt.
 ```bash
 for d in stacks/lambda/*; do
   [ -d "$d" ] || continue
+  ls "$d"/*.tf >/dev/null 2>&1 || continue
   echo "=== LAMBDA APPLY: $d ==="
   terraform -chdir="$d" init
   terraform -chdir="$d" plan
