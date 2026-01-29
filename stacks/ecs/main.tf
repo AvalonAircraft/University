@@ -34,14 +34,14 @@ module "ecs" {
   log_retention_days = var.log_retention_days
 
   # vorhandene Rollen nutzen (wenn die Data-Sources nicht existieren, einfach Variablen leer lassen)
-  task_role_arn = (
-  var.task_role_arn != "" ? var.task_role_arn :
-  (length(data.aws_iam_role.task) > 0 ? data.aws_iam_role.task[0].arn : "")
+  task_role_arn = coalesce(
+  nullif(var.task_role_arn, ""),
+  try(data.aws_iam_role.task[0].arn, null)
 )
 
-execution_role_arn = (
-  var.execution_role_arn != "" ? var.execution_role_arn :
-  (length(data.aws_iam_role.execution) > 0 ? data.aws_iam_role.execution[0].arn : "")
+execution_role_arn = coalesce(
+  nullif(var.execution_role_arn, ""),
+  try(data.aws_iam_role.execution[0].arn, null)
 )
 
 
