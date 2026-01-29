@@ -642,14 +642,15 @@ Die StepFunctions Stacks erwarten:
 #
 ### 20.1 IAM StepFunctions Rollen deployen (falls noch nicht gemacht)
 ```bash
-for d in stacks/stepfunctions/*; do
+for d in stacks/iam/stepfunctions/*; do
   [ -d "$d" ] || continue
   ls "$d"/*.tf >/dev/null 2>&1 || continue
-  echo "=== STEPFUNCTIONS APPLY: $d ==="
+  echo "=== IAM STEPFUNCTION ROLE APPLY: $d ==="
   terraform -chdir="$d" init
   terraform -chdir="$d" plan
   terraform -chdir="$d" apply
 done
+
 
 ```
 #
@@ -668,18 +669,38 @@ aws logs create-log-group --log-group-name "/aws/stepfunctions/QueryStepFunction
 
 **Beispiel AgentStepFunction:**  
 ```bash
-ROLE_ARN_AGENT_SFN="<SET_ME_FROM_IAM_ROLE_OUTPUT>"
-LOG_GROUP_AGENT_SFN="/aws/stepfunctions/AgentStepFunction"
+for d in stacks/stepfunctions/*; do
+  [ -d "$d" ] || continue
+  ls "$d"/*.tf >/dev/null 2>&1 || continue
 
-cat > stacks/stepfunctions/AgentStepFunction/terraform.tfvars <<EOF
-region = "${AWS_REGION}"
-existing_role_arn = "${ROLE_ARN_AGENT_SFN}"
-log_group_name = "${LOG_GROUP_AGENT_SFN}"
+  echo "=== STEPFUNCTIONS APPLY: $d ==="
+
+  # Auto-create minimal terraform.tfvars if missing
+  if [ ! -f "$d/terraform.tfvars" ]; then
+    VAR_COUNT=$(grep -R --include="*.tf" -E '^\s*variable\s+"' "$d" | wc -l | tr -d ' ')
+    HAS_REGION=$(grep -R --include="*.tf" -E '^\s*variable\s+"region"' "$d" >/dev/null 2>&1; echo $?)
+
+    if [ "$VAR_COUNT" -eq 0 ]; then
+      cat > "$d/terraform.tfvars" <<EOF
+# auto-generated (no variables defined)
 EOF
+      echo "  -> created $d/terraform.tfvars (empty)"
+    elif [ "$HAS_REGION" -eq 0 ] && [ "$VAR_COUNT" -eq 1 ]; then
+      cat > "$d/terraform.tfvars" <<EOF
+region = "${AWS_REGION}"
+EOF
+      echo "  -> created $d/terraform.tfvars (region only)"
+    else
+      echo "  -> SKIP: $d braucht zusätzliche Variablen. Lege $d/terraform.tfvars manuell an."
+      echo "     Tipp: siehe Beispiel unten (role arn, log group name, etc.)"
+      continue
+    fi
+  fi
 
-terraform -chdir=stacks/stepfunctions/AgentStepFunction init
-terraform -chdir=stacks/stepfunctions/AgentStepFunction plan
-terraform -chdir=stacks/stepfunctions/AgentStepFunction apply
+  terraform -chdir="$d" init
+  terraform -chdir="$d" plan
+  terraform -chdir="$d" apply
+done
 ```
 >[!IMPORTANT]
 Wiederhole analog für:
