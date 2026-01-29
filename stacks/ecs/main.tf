@@ -1,11 +1,14 @@
 # Vor dem module-Block einfügen: vorhandene IAM-Rollen per Name auflösen
 data "aws_iam_role" "task" {
-  name = "agentTaskRole"                 # vorhandene Task-Role (falls vorhanden)
+  count = var.task_role_name != "" ? 1 : 0
+  name  = var.task_role_name
 }
 
 data "aws_iam_role" "execution" {
-  name = "ecsTaskExecutionRole-ai-agent" # vorhandene Execution-Role (falls vorhanden)
+  count = var.execution_role_name != "" ? 1 : 0
+  name  = var.execution_role_name
 }
+
 
 module "ecs" {
   source = "../../modules/ecs"
