@@ -49,7 +49,7 @@ WICHTIG: Du brauchst **NICHT** alles.
 >Auch wenn manche Stacks einen Default für `region` haben:  
 >**Setze `region` IMMER explizit in jeder terraform.tfvars**, damit nichts unbemerkt in die falsche Region deployed.
 >
->Ausnahme: `stacks/cdn` muss **immer** `us-east-1` sein (ACM/CloudFront).
+>Dieses Repo deployt alle Ressourcen in us-east-1.
 
 
 - Optional: Docker (nur für ECS/ECR, wenn du Container pushen willst)
@@ -61,11 +61,16 @@ WICHTIG: Du brauchst **NICHT** alles.
 - `aws configure --profile myprofile`  
 - `export AWS_PROFILE="myprofile"`
 
-**Region-Defaults:**
-- Workloads (VPC/ECS/Lambda/etc.) typischerweise z.B. `ap-northeast-2`
-- CloudFront ACM Zertifikate müssen i.d.R. in `us-east-1` angelegt werden (für `stacks/cdn`)
-- `export AWS_REGION="ap-northeast-2"`
-- `aws sts get-caller-identity`
+
+**Region-Konvention**
+```bash
+# Workload Region (VPC/ECS/Lambda/API GW etc.)
+: "${AWS_REGION:=us-east-1}"
+
+echo "AWS_REGION=$AWS_REGION"
+aws sts get-caller-identity
+```
+
 #
 ---
 ## 3) Repo klonen
@@ -190,8 +195,8 @@ Wenn du das nicht brauchst: diese 3 Stacks einfach überspringen.
 ## 8) B) NETWORKING — Variante 1 (empfohlen): `stacks/network`
 ---
 ```bash
-cat > stacks/network/terraform.tfvars <<'EOF'
-region = "ap-northeast-2"
+cat > stacks/network/terraform.tfvars <<EOF
+region = "${AWS_REGION}"
 EOF
 
 terraform -chdir=stacks/network init
@@ -229,8 +234,8 @@ echo "SG_AURORA=$SG_AURORA"
 Nur nutzen, wenn du `stacks/network` NICHT nutzt.
 
 ```bash
-cat > stacks/vpc/terraform.tfvars <<'EOF'
-region = "ap-northeast-2"
+cat > stacks/vpc/terraform.tfvars <<EOF
+region = "${AWS_REGION}"
 EOF  
 
 terraform -chdir=stacks/vpc init && terraform -chdir=stacks/vpc apply  
@@ -242,7 +247,7 @@ SUBNET_PRIVATE1=$(terraform -chdir=stacks/vpc output -raw subnet_private1_id)
 SUBNET_PRIVATE2=$(terraform -chdir=stacks/vpc output -raw subnet_private2_id)
 
 cat > stacks/security_groups/terraform.tfvars <<EOF
-region = "ap-northeast-2"
+region = "${AWS_REGION}"
 vpc_id = "${VPC_ID}"
 EOF  
 
@@ -257,8 +262,8 @@ SG_AURORA=$(terraform -chdir=stacks/security_groups output -raw sg_aurora_id)
 ## 10) C) KMS — `stacks/kms/tenant-master-key`
 ---
 ```bash
-cat > stacks/kms/tenant-master-key/terraform.tfvars <<'EOF'  
-region = "ap-northeast-2"  
+cat > stacks/kms/tenant-master-key/terraform.tfvars <<EOF  
+region = "${AWS_REGION}" 
 EOF
 
 terraform -chdir=stacks/kms/tenant-master-key init
@@ -283,7 +288,7 @@ echo "TENANT_KMS_KEY_ARN=$TENANT_KMS_KEY_ARN"
 
 ```bash
 cat > stacks/nlb/terraform.tfvars <<EOF
-region = "ap-northeast-2"
+region = "${AWS_REGION}"
 vpc_id = "${VPC_ID}"
 subnet_private1 = "${SUBNET_PRIVATE1}"
 subnet_private2 = "${SUBNET_PRIVATE2}"
@@ -343,7 +348,7 @@ Default `kms_key_arn` im Stack ist author-spezifisch -> hier überschreiben!
 ECR_REPO_NAME="ai-agent"
 
 cat > stacks/ecr/terraform.tfvars <<EOF
-region = "ap-northeast-2"
+region = "${AWS_REGION}"
 repository_name = "${ECR_REPO_NAME}"
 kms_key_arn = "${TENANT_KMS_KEY_ARN}"
 EOF
@@ -383,7 +388,7 @@ docker push "${ECR_URI}:latest"
 CONTAINER_IMAGE="${ECR_URI}:latest"
 
 cat > stacks/ecs/terraform.tfvars <<EOF
-region = "ap-northeast-2"
+region = "${AWS_REGION}"
 subnet_ids = ["${SUBNET_PRIVATE1}", "${SUBNET_PRIVATE2}"]
 security_group_id = "${SG_ECS_FARGATE}"
 target_group_arn = "${TARGET_GROUP_ARN}"
@@ -404,7 +409,7 @@ Dieser Stack nutzt das aurora-mysql Modul und erstellt DB + Secret in Secrets Ma
 >Benötigt: `vpc_id`, `subnet_ids` (private), `security_group_ids` (Aurora SG)
 ```bash
 cat > stacks/aurora-mysql/terraform.tfvars <<EOF
-region = "ap-northeast-2"
+region = "${AWS_REGION}"
 vpc_id = "${VPC_ID}"
 subnet_ids = ["${SUBNET_PRIVATE1}", "${SUBNET_PRIVATE2}"]
 security_group_ids = ["${SG_AURORA}"]
@@ -427,7 +432,6 @@ Wenn du erstmal nur einen Bucket brauchst: setze diese Werte auf leer/neutral.
 
 ```bash
 # Sicherstellen, dass AWS_REGION gesetzt ist (Workload-Region)
-: "${AWS_REGION:=ap-northeast-2}"
 
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 S3_BUCKET_NAME="university-bucket-${ACCOUNT_ID}-${AWS_REGION}"
@@ -528,11 +532,11 @@ echo "LAMBDA_AURORA_ARN=$LAMBDA_AURORA_ARN"
 ## 18.2 terraform.tfvars erstellen
 
 [!IMPORTANT]
-Setze region explizit auf deine Workload-Region (z.B. ap-northeast-2), damit alles konsistent deployt wird.
+Setze region explizit auf die Workload-Region us-east-1, damit alles konsistent deployt wird.
 
 ```bash
 cat > stacks/apigw/terraform.tfvars <<EOF
-region = "ap-northeast-2"                  # eigene Region setzen
+region = "${AWS_REGION}"                
 api_name = "GeneralGateway"                # optional: eigener Name
 api_description = "REST (EDGE) API"        # optional: eigene Beschreibung
 
@@ -632,7 +636,7 @@ ROLE_ARN_AGENT_SFN="<SET_ME_FROM_IAM_ROLE_OUTPUT>"
 LOG_GROUP_AGENT_SFN="/aws/stepfunctions/AgentStepFunction"
 
 cat > stacks/stepfunctions/AgentStepFunction/terraform.tfvars <<EOF
-region = "ap-northeast-2"
+region = "${AWS_REGION}"
 existing_role_arn = "${ROLE_ARN_AGENT_SFN}"
 log_group_name = "${LOG_GROUP_AGENT_SFN}"
 EOF
@@ -690,6 +694,7 @@ CloudFront ACM Zertifikate müssen i.d.R. in us-east-1 sein.
 >- Daher: temporär Region switchen:  
 >    - export AWS_REGION="us-east-1"
 
+
 >[!IMPORTANT]
 Du brauchst:
 >- `domain_name` **+** `www_domain_name`
@@ -697,7 +702,7 @@ Du brauchst:
 >- `s3_origin_bucket_name` (dein bucket)
 ```bash
 cat > stacks/cdn/terraform.tfvars <<EOF
-region = "us-east-1"
+region = "${AWS_REGION}"
 domain_name = "example.com"
 www_domain_name = "www.example.com"
 hosted_zone_id = "${HOSTED_ZONE_ID}"
@@ -721,14 +726,14 @@ Nach CDN: DNS Records für Root/www auf CloudFront zeigen lassen -> in `stacks/d
 
 **Zurück zur Workload Region:**  
 
-`export AWS_REGION="ap-northeast-2"`
+`export AWS_REGION="${AWS_REGION}"
 #
 ---
 ## 24) SES deployen (wenn Domain vorhanden)
 ---
 ```bash
 cat > stacks/ses/terraform.tfvars <<EOF
-region = "ap-northeast-2"
+region = "${AWS_REGION}"
 domain_name = "example.com"
 hosted_zone_id = "${HOSTED_ZONE_ID}"
 s3_bucket_name = "${S3_BUCKET_NAME}"
@@ -765,9 +770,7 @@ terraform -chdir=stacks/network destroy
 
 **Domain:**  
 ```bash
-export AWS_REGION="us-east-1"
 terraform -chdir=stacks/cdn destroy
-export AWS_REGION="ap-northeast-2"
 terraform -chdir=stacks/ses destroy
 terraform -chdir=stacks/dns destroy
 ```
