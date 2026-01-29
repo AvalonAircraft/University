@@ -428,8 +428,10 @@ terraform -chdir=stacks/s3 apply
 ---
 ## 17) D) Lambda — `stacks/lambda/*`
 ---
->[!NOTE]
-Deploye die Lambda Substacks, die du brauchst (oder alle).
+
+[!NOTE]
+Deploye die Lambda-Substacks, die du brauchst (oder alle).
+Jede Untermappe unter stacks/lambda/* ist ein eigenes Terraform-Projekt.
 
 ```bash
 for d in stacks/lambda/*; do
@@ -440,29 +442,29 @@ for d in stacks/lambda/*; do
   terraform -chdir="$d" apply
 done
 ```
->[!NOTE]
-APIGW benötigt 2 Lambda ARNs + 2 Invoke-ARNs (API Gateway Integration URI).
->
->Das Repo liefert die Invoke-ARNs NICHT als Output in den Lambda Stacks, daher bauen wir sie so:
->- `LAMBDA_ARN`:     bekommst du via AWS CLI (FunctionArn)
->- `LAMBDA_INVOKE`:  `"arn:aws:apigateway:${REGION}:lambda:path/2015-03-31/functions/${LAMBDA_ARN}/invocations"`
 
-**Beispiel (ersetze Function Names durch DEINE Funktionen, die du an `/agent` & `/query` hängen willst):**  
+[!IMPORTANT]
+API Gateway benötigt in diesem Repo KEINE "Invoke-ARNs" als Input.
+Das Modul modules/apigw_rest baut die Integration-URI intern und erwartet in stacks/apigw nur:
+- lambda_arn_agent
+- lambda_arn_aurora
+Diese Werte bekommst du als Lambda Function ARN aus den Terraform-Outputs der jeweiligen Lambda-Stacks.
+Lambda ARNs aus Terraform Outputs (Beispiel)
+
+[!NOTE]
+Ersetze die Stack-Pfade durch deine tatsächlichen Lambda-Stack-Ordnernamen.
+
 ```bash
-LAMBDA_1_NAME="AgentHandlerFunction"
-LAMBDA_2_NAME="<YOUR_SECOND_FUNCTION_NAME>"
+LAMBDA_AGENT_ARN=$(terraform -chdir=stacks/lambda/lambda_AgentControlHandler output -raw lambda_function_arn)
+LAMBDA_AURORA_ARN=$(terraform -chdir=stacks/lambda/lambda6 output -raw lambda_function_arn)
 
-LAMBDA_1_ARN=$(aws lambda get-function --function-name "${LAMBDA_1_NAME}" --query 'Configuration.FunctionArn' --output text)
-LAMBDA_2_ARN=$(aws lambda get-function --function-name "${LAMBDA_2_NAME}" --query 'Configuration.FunctionArn' --output text)
-
-LAMBDA_1_INVOKE_ARN="arn:aws:apigateway:${AWS_REGION}:lambda:path/2015-03-31/functions/${LAMBDA_1_ARN}/invocations"
-LAMBDA_2_INVOKE_ARN="arn:aws:apigateway:${AWS_REGION}:lambda:path/2015-03-31/functions/${LAMBDA_2_ARN}/invocations"
-
-echo "LAMBDA_1_ARN=$LAMBDA_1_ARN"
-echo "LAMBDA_1_INVOKE_ARN=$LAMBDA_1_INVOKE_ARN"
-echo "LAMBDA_2_ARN=$LAMBDA_2_ARN"
-echo "LAMBDA_2_INVOKE_ARN=$LAMBDA_2_INVOKE_ARN"
+echo "LAMBDA_AGENT_ARN=$LAMBDA_AGENT_ARN"
+echo "LAMBDA_AURORA_ARN=$LAMBDA_AURORA_ARN"
 ```
+
+[!IMPORTANT]
+Falls in Lambda-Stacks bereits author-spezifische Defaults (z.B. Account IDs/ARNs/Regionen) eingetragen sind:
+immer durch eigene Werte ersetzen, idealerweise via terraform.tfvars im jeweiligen Lambda-Stack.
 #
 ---
 ## 18) D) API Gateway (REST) — `stacks/apigw`
