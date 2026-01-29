@@ -43,8 +43,30 @@ variable "log_group_name"     { type = string, default = "/ecs/fargate-agent-tas
 variable "log_retention_days" { type = number, default = 14 }
 
 # Optional vorhandene Rollen (leer lassen, wenn Modul sie erstellen soll)
-variable "task_role_arn"      { type = string, default = "" }
-variable "execution_role_arn" { type = string, default = "" }
+variable "task_role_arn" {
+  type        = string
+  description = "Optional: existing task role ARN. Leave empty to let module create it."
+  default     = ""
+}
+
+variable "execution_role_arn" {
+  type        = string
+  description = "Optional: existing execution role ARN. Leave empty to let module create it."
+  default     = ""
+}
+
+variable "task_role_name" {
+  type        = string
+  description = "Optional: existing task role NAME to look up. Leave empty to skip lookup."
+  default     = ""
+}
+
+variable "execution_role_name" {
+  type        = string
+  description = "Optional: existing execution role NAME to look up. Leave empty to skip lookup."
+  default     = ""
+}
+
 
 # Env ins Container
 variable "container_environment" {
