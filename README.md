@@ -76,7 +76,7 @@ aws sts get-caller-identity
 ## 3) Repo klonen
 ---
 - `git clone <REPO_URL>`
-- `cd University-main`
+- `cd <repo-folder>`
 #
 ---
 ## 4) Platzhalter/Defaults
@@ -117,26 +117,26 @@ WICHTIG: Platzhalter/Defaults finden & überschreiben
 **Variante 2:** `stacks/vpc` **->** `stacks/security_groups`  
 
 ### C) [CORE](#core)
-**1)** `stacks/kms/tenant-master-key`  
-**2)** `stacks/iam` (Rollen)  
-**3)** `stacks/aurora-mysql` (optional)  
-**4)** `stacks/s3` (optional/empfohlen)  
+**5)** `stacks/iam` (Rollen) 
+**6)** `stacks/kms/tenant-master-key`  
+**7)** `stacks/s3` (optional/empfohlen)  
+**8)** `stacks/aurora-mysql` (optional)  
 
 ### D) [OPTIONAL](#optional)
-**5)** `stacks/nlb`  # Nur wenn ecs genutzt wird
-**6)** `stacks/ecr` 
-**7)** `stacks/ecs`  
+**9)** `stacks/nlb`  # Nur wenn ecs genutzt wird
+**10)** `stacks/ecr` 
+**11)** `stacks/ecs`  
 
 ### E) SERVERLESS / API / EVENTS / WORKFLOWS
-**8)** `stacks/lambda/*`  
-**9)** `stacks/apigw`  
-**10)** `stacks/eventbridge/*`  
-**11)** `stacks/stepfunctions/*` (+ passende IAM Roles + Log Groups)  
-**12)** `stacks/ses` (optional)  
+**12)** `stacks/lambda/*`  
+**13)** `stacks/apigw`  
+**14)** `stacks/eventbridge/*`  
+**15)** `stacks/stepfunctions/*` (+ passende IAM Roles + Log Groups)  
+**16)** `stacks/ses` (optional)  
 
 ### F) DOMAIN/CDN (optional; benötigt echte Domain)
-**13)** `stacks/dns`  
-**14)** `stacks/cdn`  
+**17)** `stacks/dns`  
+**18)** `stacks/cdn`  
 
 #
 ---
@@ -382,18 +382,16 @@ WICHTIG:
 
 ### 14.1 Option A: Deploy OHNE Docker (Public Image)
 ```bash
-# Beispiel Public Image (kein Docker Build, kein ECR Push nötig)
-CONTAINER_IMAGE="public.ecr.aws/docker/library/nginx:latest"
-# Alternativen:
-# CONTAINER_IMAGE="nginx:latest"  # DockerHub (wenn Pull erlaubt)
-# CONTAINER_IMAGE="public.ecr.aws/amazonlinux/amazonlinux:2023"
-
 cat > stacks/ecs/terraform.tfvars <<EOF
 region = "${AWS_REGION}"
 subnet_ids = ["${SUBNET_PRIVATE1}", "${SUBNET_PRIVATE2}"]
 security_group_id = "${SG_ECS_FARGATE}"
 target_group_arn = "${TARGET_GROUP_ARN}"
 container_image = "${CONTAINER_IMAGE}"
+
+# Rollen per Name (aus stacks/iam)
+task_role_name      = "agentTaskRole"
+execution_role_name = "ecsTaskExecutionRole-ai-agent"
 EOF
 
 terraform -chdir=stacks/ecs init
@@ -422,7 +420,12 @@ subnet_ids = ["${SUBNET_PRIVATE1}", "${SUBNET_PRIVATE2}"]
 security_group_id = "${SG_ECS_FARGATE}"
 target_group_arn = "${TARGET_GROUP_ARN}"
 container_image = "${CONTAINER_IMAGE}"
+
+# Rollen per Name (aus stacks/iam)
+task_role_name      = "agentTaskRole"
+execution_role_name = "ecsTaskExecutionRole-ai-agent"
 EOF
+
 
 terraform -chdir=stacks/ecs init
 terraform -chdir=stacks/ecs plan
