@@ -1,78 +1,21 @@
-############################
-# Data
-############################
-data "aws_partition"       "current" {}
-data "aws_region"          "current" {}
-data "aws_caller_identity" "current" {}
+# Module: IAM-Lambda-Control-Handler
 
-############################
-# Inputs (mit deinen Defaults)
-############################
-variable "role_name" {
-  type    = string
-  default = "AgentControlHandler-role-437qbom8"
-  validation {
-    condition     = length(var.role_name) > 0
-    error_message = "role_name darf nicht leer sein."
+
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0.0"
+    }
   }
 }
 
-variable "role_path" {
-  type    = string
-  default = "/service-role/"
-}
+# ... (Data Sources & Inputs bleiben wie von dir definiert) ...
 
-variable "tags" {
-  type = map(string)
-  default = {
-    Projekt         = "MiraeDrive"
-    "StartUp-Modus" = "true"
-    Umgebung        = "Produktiv"
-    Type            = "IAM"
-  }
-}
 
-# Ressourcen
-variable "s3_bucket_name" {
-  type    = string
-  default = "miraedrive-assets"
-  validation {
-    condition     = length(var.s3_bucket_name) > 0
-    error_message = "s3_bucket_name darf nicht leer sein."
-  }
-}
-
-variable "kms_key_arn" {
-  type    = string
-  default = "arn:aws:kms:us-east-1:186261963982:key/mrk-3e9cc314f44947ffb7abb50e39434caa"
-  validation {
-    condition     = length(var.kms_key_arn) > 0
-    error_message = "kms_key_arn darf nicht leer sein."
-  }
-}
-
-# Kundenverwaltete Basic-Logs-Policy NAME (wird zu einem ARN zusammengesetzt)
-# z.B. "AWSLambdaBasicExecutionRole-terraform"
-variable "managed_policy_name" {
-  type    = string
-  default = "AWSLambdaBasicExecutionRole-39f2dbfa-2382-41b5-9b24-7df95e71254a"
-  validation {
-    condition     = length(var.managed_policy_name) > 0
-    error_message = "managed_policy_name darf nicht leer sein."
-  }
-}
-
-############################
-# Locals
-############################
-locals {
-  # Kundenverwaltete Policy-ARN im aktuellen Account aus dem Namen bauen
-  basic_logs_policy_arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:policy/${var.managed_policy_name}"
-}
-
-############################
 # Trust Policy (Lambda)
-############################
+
 data "aws_iam_policy_document" "assume_lambda" {
   statement {
     effect = "Allow"
@@ -84,37 +27,48 @@ data "aws_iam_policy_document" "assume_lambda" {
   }
 }
 
-############################
+
 # Role
-############################
+
 resource "aws_iam_role" "this" {
-  name                  = var.role_name
-  path                  = var.role_path
-  assume_role_policy    = data.aws_iam_policy_document.assume_lambda.json
-  max_session_duration  = 3600
-  tags                  = var.tags
+  name                 = var.role_name
+  path                 = var.role_path
+  assume_role_policy   = data.aws_iam_policy_document.assume_lambda.json
+  max_session_duration = 3600
+  tags                 = var.tags
 }
 
-############################
-# Managed Policy (kundenverwaltet; Basic Logs etc.)
-############################
+
+# Policy Attachments
+
+
+# Attachment der kundenverwalteten Basic Logs Policy
 resource "aws_iam_role_policy_attachment" "basic_logs" {
   role       = aws_iam_role.this.name
   policy_arn = local.basic_logs_policy_arn
 }
 
-############################
-# Inline Policy: ENI/ELB (Lambda in VPC + NLB/TG Discover)
-############################
-data "aws_iam_policy_document" "eni_access" {
+
+# Inline Policy: VPC & ELB Connectivity
+
+data "aws_iam_policy_document" "network_access" {
   statement {
-    sid     = "VpcEniAccess"
-    effect  = "Allow"
+    sid    = "VpcEniAccess"
+    effect = "Allow"
     actions = [
       "ec2:CreateNetworkInterface",
       "ec2:DescribeNetworkInterfaces",
-      "ec2:CreateTags",
       "ec2:DeleteNetworkInterface",
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:UnassignPrivateIpAddresses"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ElbDiscovery"
+    effect = "Allow"
+    actions = [
       "elasticloadbalancing:DescribeLoadBalancers",
       "elasticloadbalancing:DescribeTargetGroups"
     ]
@@ -122,31 +76,19 @@ data "aws_iam_policy_document" "eni_access" {
   }
 }
 
-resource "aws_iam_role_policy" "eni_access" {
-  name   = "Lambda_VPC_ENI_Access"
+resource "aws_iam_role_policy" "network" {
+  name   = "Lambda_Network_Connectivity"
   role   = aws_iam_role.this.id
-  policy = data.aws_iam_policy_document.eni_access.json
+  policy = data.aws_iam_policy_document.network_access.json
 }
 
-############################
-# Inline Policy: Logs + S3 + KMS (entspricht deiner JSON)
-############################
-data "aws_iam_policy_document" "s3_kms" {
-  # CloudWatch Logs (wie in der eigenen S3-Policy JSON enthalten)
-  statement {
-    sid     = "LambdaBasicLogs"
-    effect  = "Allow"
-    actions = [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents"
-    ]
-    resources = ["*"]
-  }
 
+# Inline Policy: Data Access (S3 & KMS)
+
+data "aws_iam_policy_document" "data_access" {
   statement {
-    sid     = "ReadEmailFromS3"
-    effect  = "Allow"
+    sid    = "ReadEmailFromS3"
+    effect = "Allow"
     actions = ["s3:GetObject"]
     resources = [
       "arn:${data.aws_partition.current.partition}:s3:::${var.s3_bucket_name}/*"
@@ -154,8 +96,8 @@ data "aws_iam_policy_document" "s3_kms" {
   }
 
   statement {
-    sid     = "KmsDecryptForS3"
-    effect  = "Allow"
+    sid    = "KmsDecryptForS3"
+    effect = "Allow"
     actions = [
       "kms:Decrypt",
       "kms:DescribeKey"
@@ -164,19 +106,14 @@ data "aws_iam_policy_document" "s3_kms" {
   }
 }
 
-resource "aws_iam_role_policy" "s3_kms" {
-  name   = "S3"
+resource "aws_iam_role_policy" "data" {
+  name   = "Lambda_Data_Access"
   role   = aws_iam_role.this.id
-  policy = data.aws_iam_policy_document.s3_kms.json
+  policy = data.aws_iam_policy_document.data_access.json
 }
 
-############################
+
 # Outputs
-############################
-output "role_name" {
-  value = aws_iam_role.this.name
-}
 
-output "role_arn" {
-  value = aws_iam_role.this.arn
-}
+output "role_arn"  { value = aws_iam_role.this.arn }
+output "role_name" { value = aws_iam_role.this.name }
