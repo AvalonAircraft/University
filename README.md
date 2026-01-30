@@ -1,4 +1,4 @@
-````md
+
 # README.md — University Terraform (AWS) Full Deploy Guide
 
 Dieses Repo enthält mehrere Terraform-“Stacks” unter `stacks/` (jede Untermappe = eigenes Terraform-Projekt)
@@ -774,7 +774,3 @@ terraform -chdir=stacks/organizations destroy
 * **StepFunctions Fehler “Log group does not exist”** → Log Groups vorab anlegen (Punkt 20)
 * **CloudFront Zertifikat** → ACM muss in `us-east-1` sein (Punkt 23)
 
-```
-
-Wenn du mir die *tatsächliche* README-Datei (oder Repo-Struktur/Module-Inputs) gibst, kann ich die Stellen, wo `CONTAINER_IMAGE`, Event-Bus-Namen, oder weitere Defaults in deinem Code wirklich herkommen, 1:1 konsistent machen (ohne “angenommene” Variablennamen).
-```
