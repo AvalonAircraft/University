@@ -1,22 +1,30 @@
-data "aws_partition" "current" {}
-data "aws_region"     "current" {}
-data "aws_caller_identity" "current" {}
+# Provider
 
-# Standard: AWS-managed Policies (portabel in jedem Account).
-# Wenn ich kundenverwaltete Policies nutzen will, kann ich sie
-# via Variable policy_arns_override übergeben.
+provider "aws" {
+  region = var.region
+}
+
+
+# Data sources
+
+data "aws_partition" "current" {}
+
+
+# Locals: AWS-managed default policies (portable)
+
 locals {
   aws_managed_lambda_policies = [
     "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
   ]
 
-  effective_policy_arns = (
-    length(var.policy_arns_override) > 0
+  effective_policy_arns = length(var.policy_arns_override) > 0
     ? var.policy_arns_override
     : local.aws_managed_lambda_policies
-  )
 }
+
+
+# Module
 
 module "role_lambda_agent_handler" {
   source = "../../../modules/iam/lambdaAgentHandler-role"
@@ -27,5 +35,8 @@ module "role_lambda_agent_handler" {
   tags        = var.tags
 }
 
+
+# Outputs
+
 output "role_name" { value = module.role_lambda_agent_handler.role_name }
-output "role_arn"  { value = module.role_lambda_agent_handler.role_arn  }
+output "role_arn"  { value = module.role_lambda_agent_handler.role_arn }
