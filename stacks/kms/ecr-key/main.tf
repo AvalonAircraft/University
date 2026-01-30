@@ -8,5 +8,10 @@ module "ecr_kms" {
   tags                = var.tags
 }
 
-output "ecr_key_arn"   { value = module.ecr_kms.key_arn }
-output "ecr_alias_arn" { value = module.ecr_kms.alias_arn }
+output "ecr_key_arn" {
+  value = module.ecr_kms.key_arn
+}
+
+output "ecr_alias_arn" {
+  value = module.ecr_kms.alias_arn
+}
