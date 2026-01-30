@@ -2,15 +2,39 @@ data "aws_caller_identity" "current" {}
 data "aws_partition"       "current" {}
 data "aws_region"          "current" {}
 
-variable "region"      { type = string, default = "us-east-1" }
+variable "region" {
+  type    = string
+  default = "us-east-1"
+}
+
 
 # Cluster/Service
-variable "cluster_name" { type = string, default = "ai_agent_fargate_container" }
-variable "service_name" { type = string, default = "email-agent-svc" }
-variable "task_family"  { type = string, default = "fargate-agent-task" }
+
+
+variable "cluster_name" {
+  type    = string
+  default = "ai_agent_fargate_container"
+}
+
+variable "service_name" {
+  type    = string
+  default = "email-agent-svc"
+}
+
+variable "task_family" {
+  type    = string
+  default = "fargate-agent-task"
+}
+
 
 # Container
-variable "container_name"  { type = string, default = "hr-agent" }
+
+
+variable "container_name" {
+  type    = string
+  default = "hr-agent"
+}
+
 variable "container_image" {
   type        = string
   description = "Container image URI (public DockerHub/public.ecr.aws or private ECR)."
@@ -21,30 +45,72 @@ variable "container_image" {
     error_message = "container_image must be a non-empty string."
   }
 }
-variable "container_port"  { type = number, default = 8080 }
+
+variable "container_port" {
+  type    = number
+  default = 8080
+}
+
 
 # Fargate Sizing
-variable "cpu"    { type = number, default = 1024 }  # ~1 vCPU
-variable "memory" { type = number, default = 2048 }  # 2 GB
+
+
+variable "cpu" {
+  type    = number
+  default = 1024 # ~1 vCPU
+}
+
+variable "memory" {
+  type    = number
+  default = 2048 # 2 GB
+}
+
 
 # Networking
-variable "subnet_ids"        { type = list(string) }                    # IDs aus Network-Stack übergeben
+
+
+variable "subnet_ids" {
+  type        = list(string)
+  description = "Private subnet IDs (pass from network/vpc stack outputs)."
+}
+
 variable "security_group_id" {
   type        = string
   description = "ECS service security group id"
-}variable "assign_public_ip"  { type = bool, default = false }
+}
+
+variable "assign_public_ip" {
+  type    = bool
+  default = false
+}
+
 
 # Load Balancer Target Group
+
+
 variable "target_group_arn" {
   type        = string
   description = "Target group ARN for the service"
 }
 
-# Logs
-variable "log_group_name"     { type = string, default = "/ecs/fargate-agent-task" }
-variable "log_retention_days" { type = number, default = 14 }
 
-# Optional vorhandene Rollen (leer lassen, wenn Modul sie erstellen soll)
+# Logs
+
+
+variable "log_group_name" {
+  type    = string
+  default = "/ecs/fargate-agent-task"
+}
+
+variable "log_retention_days" {
+  type    = number
+  default = 14
+}
+
+
+# Optional vorhandene Rollen
+
+
 variable "task_role_arn" {
   type        = string
   description = "Optional: existing task role ARN. Leave empty to let module create it."
@@ -71,14 +137,17 @@ variable "execution_role_name" {
 
 
 # Env ins Container
+
+
 variable "container_environment" {
   type = map(string)
+
   default = {
-    AWS_REGION          = "us-east-1"
+    AWS_REGION = "us-east-1"
 
     # Bedrock Konfiguration bleibt drin
-    BEDROCK_MODEL_ID    = "anthropic.claude-3-haiku-20240307-v1:0"
-    DEFAULT_LANG        = "de"
+    BEDROCK_MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+    DEFAULT_LANG     = "de"
 
     # Integration-Flags default OFF, damit "deploy works" ohne Abhängigkeiten
     USE_BEDROCK         = "0"
@@ -86,11 +155,14 @@ variable "container_environment" {
     SEND_TO_EVENTBRIDGE = "0"
 
     # Optional: EventBridge defaults leer/neutral, damit nix hard-failt
-    EVENT_BUS_NAME      = ""
-    EVENT_DETAIL_TYPE   = ""
-    EVENT_SOURCE        = ""
+    EVENT_BUS_NAME    = ""
+    EVENT_DETAIL_TYPE = ""
+    EVENT_SOURCE      = ""
   }
 }
+
+
+# Tags
 
 
 variable "tags" {
@@ -99,6 +171,6 @@ variable "tags" {
     Projekt   = "MiraeDrive"
     Umgebung  = "Produktiv"
     Component = "ECS"
-    TenantID = ""
+    TenantID  = ""
   }
 }
