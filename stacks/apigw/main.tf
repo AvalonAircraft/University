@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 
-# Resolve Lambda ARNs by function name
+# Resolve Lambda ARNs by name
 
 data "aws_lambda_function" "aurora" {
   function_name = var.lambda_aurora_function_name
@@ -14,7 +14,7 @@ data "aws_lambda_function" "agent" {
 }
 
 
-# API Gateway Module
+# API Gateway module
 
 module "apigw" {
   source          = "../../modules/apigw_rest"
