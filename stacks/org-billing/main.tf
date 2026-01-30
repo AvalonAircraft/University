@@ -1,36 +1,13 @@
-terraform {
-  required_version = ">= 1.5"
+# stacks/org-billing/main.tf
 
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    # Falls dein modules/billing-conductor intern awscc_* Ressourcen nutzt:
-    awscc = {
-      source  = "hashicorp/awscc"
-      version = "~> 0.75"
-    }
-  }
-}
 
 provider "aws" {
   region = var.region
 }
 
-# Nur nötig, wenn das Module awscc verwendet:
-provider "awscc" {
-  region = var.region
-}
-
 module "billing" {
+  count  = var.enabled ? 1 : 0
   source = "../../modules/billing-conductor"
-
-  # Wenn dein Modul awscc nutzt, ist das die robuste Variante:
-  providers = {
-    aws   = aws
-    awscc = awscc
-  }
 
   cost_allocation_tag_key = var.cost_allocation_tag_key
 
@@ -39,20 +16,20 @@ module "billing" {
   pricing_rule_type = var.pricing_rule_type
   pricing_rule_pct  = var.pricing_rule_pct
 
-  # Liste der Accounts, die in Billing Groups aufgenommen werden sollen
+  # Hier werden die existierenden Account-IDs der Tenants uebergeben
   billing_accounts = var.billing_accounts
 
   common_tags = var.tags
 }
 
 output "pricing_plan_arn" {
-  value = module.billing.pricing_plan_arn
+  value = try(module.billing[0].pricing_plan_arn, null)
 }
 
 output "pricing_rule_arn" {
-  value = module.billing.pricing_rule_arn
+  value = try(module.billing[0].pricing_rule_arn, null)
 }
 
 output "billing_group_arns" {
-  value = module.billing.billing_group_arns
+  value = try(module.billing[0].billing_group_arns, [])
 }
