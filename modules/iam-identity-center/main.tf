@@ -1,6 +1,5 @@
-############################
 # Module: iam-identity-center
-############################
+
 
 terraform {
   required_version = ">= 1.5.0"
@@ -14,12 +13,16 @@ terraform {
 
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
-data "aws_region"    "current" {}
+data "aws_region" "current" {}
 
-############################
+
 # Inputs
-############################
-variable "account_id" { type = string }
+
+
+variable "account_id" {
+  description = "Die AWS Account ID für die Zuweisung"
+  type        = string
+}
 
 # adminUser
 variable "admin_user_username"     { type = string }
@@ -39,21 +42,22 @@ variable "ecr_user_display_name" { type = string }
 variable "group_admin_name" { type = string, default = "AdminGroup" }
 variable "group_devs_name"  { type = string, default = "Developers" }
 
-############################
+
 # SSO Instance (home region)
-############################
+
+
 data "aws_ssoadmin_instances" "this" {}
 
 locals {
-  # Take the first (and typically only) instance in the region
   instance_arn      = tolist(data.aws_ssoadmin_instances.this.arns)[0]
   identity_store_id = tolist(data.aws_ssoadmin_instances.this.identity_store_ids)[0]
   partition         = data.aws_partition.current.partition
 }
 
-############################
+
 # Users
-############################
+
+
 resource "aws_identitystore_user" "admin" {
   identity_store_id = local.identity_store_id
   user_name         = var.admin_user_username
@@ -88,24 +92,26 @@ resource "aws_identitystore_user" "ecr" {
   }
 }
 
-############################
+
 # Groups
-############################
+
+
 resource "aws_identitystore_group" "admin_group" {
   identity_store_id = local.identity_store_id
   display_name      = var.group_admin_name
-  description       = "-"
+  description       = "Administratoren Gruppe"
 }
 
 resource "aws_identitystore_group" "developers" {
   identity_store_id = local.identity_store_id
   display_name      = var.group_devs_name
-  description       = "-"
+  description       = "Entwickler Gruppe"
 }
 
-############################
+
 # Group Memberships
-############################
+
+
 resource "aws_identitystore_group_membership" "admin_user_in_admin_group" {
   identity_store_id = local.identity_store_id
   group_id          = aws_identitystore_group.admin_group.group_id
@@ -118,9 +124,10 @@ resource "aws_identitystore_group_membership" "ecr_user_in_devs" {
   member_id         = aws_identitystore_user.ecr.user_id
 }
 
-############################
+
 # Permission Sets
-############################
+
+
 # adminUser => AdministratorAccess
 resource "aws_ssoadmin_permission_set" "admin_user" {
   name             = "adminUser"
@@ -149,9 +156,10 @@ resource "aws_ssoadmin_managed_policy_attachment" "ecr_push_minimal_full" {
   managed_policy_arn = "arn:${local.partition}:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
 }
 
-############################
+
 # Account Assignments (USER -> Account)
-############################
+
+
 resource "aws_ssoadmin_account_assignment" "assign_admin_user" {
   instance_arn       = local.instance_arn
   permission_set_arn = aws_ssoadmin_permission_set.admin_user.arn
@@ -170,9 +178,10 @@ resource "aws_ssoadmin_account_assignment" "assign_ecr_user" {
   target_id          = var.account_id
 }
 
-############################
+
 # Outputs
-############################
+
+
 output "instance_arn"      { value = local.instance_arn }
 output "identity_store_id" { value = local.identity_store_id }
 
