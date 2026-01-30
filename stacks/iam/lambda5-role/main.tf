@@ -1,19 +1,26 @@
+# Provider
+
+provider "aws" {
+  region = var.region
+}
+
 data "aws_partition"       "current" {}
-data "aws_region"          "current" {}
 data "aws_caller_identity" "current" {}
 
 locals {
   account_id = data.aws_caller_identity.current.account_id
 
-  # Umschalter: true = meine kundenverwalteten Policies verwenden (falls vorhanden),
-  # false = auf AWS-Managed zurückfallen (immer verfügbar, account-agnostisch)
+  # true  -> customer-managed Kopien (nur wenn im Account vorhanden)
+  # false -> AWS-managed Standard (immer vorhanden, portable)
   use_customer_managed = var.use_customer_managed
 
+  # Customer-managed Policies (account-spezifisch)
   policy_arns_customer = [
-    "arn:${data.aws_partition.current.partition}:iam::${local.account_id}:policy/AWSLambdaBasicExecutionRole-0d5c5f13-6de7-4df6-9414-672fb66dd47c",
-    "arn:${data.aws_partition.current.partition}:iam::${local.account_id}:policy/AWSLambdaVPCAccessExecutionRole-02e28b66-c82c-4a09-b5a5-1e3bceb961b8",
+    "arn:${data.aws_partition.current.partition}:iam::${local.account_id}:policy/${var.customer_basic_logs_policy_name}",
+    "arn:${data.aws_partition.current.partition}:iam::${local.account_id}:policy/${var.customer_vpc_access_policy_name}",
   ]
 
+  # AWS-managed Policies (account-agnostisch)
   policy_arns_aws_managed = [
     "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
@@ -26,10 +33,10 @@ module "iam_role_lambda5" {
   source = "../../../modules/iam/lambda5-role"
 
   role_name   = var.role_name
-  role_path   = "/service-role/"
+  role_path   = var.role_path
   policy_arns = local.effective_policy_arns
   tags        = var.tags
 }
 
 output "role_name" { value = module.iam_role_lambda5.role_name }
-output "role_arn"  { value = module.iam_role_lambda5.role_arn  }
+output "role_arn"  { value = module.iam_role_lambda5.role_arn }
