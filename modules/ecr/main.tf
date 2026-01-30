@@ -1,20 +1,51 @@
+# modules/ecr/main.tf
+
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 data "aws_region" "current" {}
 
-############################
-# Inputs
-############################
-variable "repository_name"       { type = string }                          # z.B. "tenant1/hr-agent"
-variable "kms_key_arn"           { type = string }                          # arn:${data.aws_partition.current.partition}:kms:... (MRK ok)
-variable "scan_on_push"          { type = bool,   default = false }         # "Manuell" in deiner Konsole => false
-variable "image_tag_mutability"  { type = string, default = "IMMUTABLE" }   # "IMMUTABLE" oder "MUTABLE"
-variable "lifecycle_policy_json" { type = string, default = "" }            # optional, leer => keine Policy
-variable "tags"                  { type = map(string), default = {} }
 
-############################
+# Inputs
+
+
+variable "repository_name" {
+  description = "z.B. 'tenant1/hr-agent'"
+  type        = string
+}
+
+variable "kms_key_arn" {
+  description = "arn:aws:kms:..."
+  type        = string
+}
+
+variable "scan_on_push" {
+  description = "Scan on push enabled? (Manuell in Console => false)"
+  type        = bool
+  default     = false
+}
+
+variable "image_tag_mutability" {
+  description = "IMMUTABLE or MUTABLE"
+  type        = string
+  default     = "IMMUTABLE"
+}
+
+variable "lifecycle_policy_json" {
+  description = "Optional JSON string for lifecycle policy. Leer => keine Policy."
+  type        = string
+  default     = ""
+}
+
+variable "tags" {
+  description = "Tags map"
+  type        = map(string)
+  default     = {}
+}
+
+
 # ECR Repository
-############################
+
+
 resource "aws_ecr_repository" "this" {
   name                 = var.repository_name
   image_tag_mutability = var.image_tag_mutability
@@ -31,18 +62,29 @@ resource "aws_ecr_repository" "this" {
   tags = var.tags
 }
 
-############################
+
 # (Optional) Lifecycle Policy
-############################
+
+
 resource "aws_ecr_lifecycle_policy" "this" {
-  count      = var.lifecycle_policy_json == "" ? 0 : 1
+  count = var.lifecycle_policy_json == "" ? 0 : 1
+
   repository = aws_ecr_repository.this.name
   policy     = var.lifecycle_policy_json
 }
 
-############################
+
 # Outputs
-############################
-output "repository_name" { value = aws_ecr_repository.this.name }
-output "repository_arn"  { value = aws_ecr_repository.this.arn }
-output "repository_url"  { value = aws_ecr_repository.this.repository_url }
+
+
+output "repository_name" {
+  value = aws_ecr_repository.this.name
+}
+
+output "repository_arn" {
+  value = aws_ecr_repository.this.arn
+}
+
+output "repository_url" {
+  value = aws_ecr_repository.this.repository_url
+}
