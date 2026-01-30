@@ -1,8 +1,19 @@
+# Data Sources (optional but ok)
+
 data "aws_caller_identity" "current" {}
 data "aws_partition"       "current" {}
 data "aws_region"          "current" {}
 
-variable "region" { type = string, default = "us-east-1" }
+
+# Region
+
+variable "region" {
+  type    = string
+  default = "us-east-1"
+}
+
+
+# Tags
 
 variable "tags" {
   type = map(string)
@@ -11,25 +22,68 @@ variable "tags" {
     "StartUp-Modus" = "true"
     Umgebung        = "Produktiv"
     Type            = "IAM"
-    TenantID = ""
+    TenantID        = ""
   }
 }
 
-# Rolle
-variable "role_name" { type = string, default = "agentTaskRole" }
 
-# Inline-Policy Parameter (Default aus der eigenen Umgebung)
-variable "s3_bucket_name" { type = string, default = "miraedrive-assets" }
+# Role Settings
 
-variable "kms_key_arn" {
-  type    = string
-  default = "arn:${data.aws_partition.current.partition}:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:key/mrk-3e9cc314f44947ffb7abb50e39434caa"
+variable "role_name" {
+  type        = string
+  description = "IAM role name for the agent task role (should be unique per account/stage)."
+  default     = "agentTaskRole"
 }
 
-# Bedrock Model (wie in der eigenen Rolle)
-variable "bedrock_model_id" { type = string, default = "anthropic.claude-3-haiku-20240307-v1:0" }
+variable "role_path" {
+  type        = string
+  description = "IAM role path."
+  default     = "/"
+}
 
-# EventBridge Bus (Standard = event-bus-miraedrive-2)
-variable "event_bus_name" { type = string, default = "event-bus-miraedrive-2" }
-# Optional: expliziter ARN; wenn leer, wird aus Name+Account gebaut
-variable "event_bus_arn"  { type = string, default = "" }
+
+# S3 (MUST be provided per environment)
+
+variable "s3_bucket_name" {
+  type        = string
+  description = "S3 bucket name used by the agent. Must exist or be created by another stack."
+}
+
+
+# KMS (portable)
+
+variable "kms_key_arn" {
+  type        = string
+  description = "Optional: KMS key ARN. Leave empty to resolve by alias or to disable KMS-specific permissions."
+  default     = ""
+}
+
+variable "kms_key_alias" {
+  type        = string
+  description = "Optional: KMS key alias to resolve ARN (e.g., alias/kms-tenant-master-key)."
+  default     = ""
+}
+
+
+# Bedrock Model
+
+variable "bedrock_model_id" {
+  type        = string
+  description = "Bedrock model id (only used for scoping permissions in policies)."
+  default     = "anthropic.claude-3-haiku-20240307-v1:0"
+}
+
+
+# EventBridge
+
+variable "event_bus_name" {
+  type        = string
+  description = "EventBridge bus name."
+  default     = "event-bus-miraedrive-2"
+}
+
+variable "event_bus_arn" {
+  type        = string
+  description = "Optional: explicit EventBridge bus ARN. If empty, derived from name/account/region."
+  default     = ""
+}
