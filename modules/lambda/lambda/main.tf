@@ -1,79 +1,110 @@
-############################################
-# Environment (account/region/partition)
-############################################
+# Module: lambda-function
+
+
 data "aws_caller_identity" "current" {}
 data "aws_region"          "current" {}
 data "aws_partition"       "current" {}
 
-############################################
+
 # Inputs
-############################################
+
+
 variable "function_name" { type = string }
 variable "runtime"       { type = string }
 variable "handler"       { type = string }
 
-# Code-Quelle
-variable "use_archive" { type = bool   , default = true }
-variable "source_file" { type = string , default = "./src/lambda_function.py" } # wird gezippt, wenn use_archive=true
-variable "filename"    { type = string , default = "" }                         # fertiges ZIP, wenn use_archive=false
+variable "use_archive" { 
+  type    = bool
+  default = true 
+}
 
-# Resourcen
-variable "memory_size"            { type = number, default = 128 }
-variable "ephemeral_storage_size" { type = number, default = 512 }
-variable "timeout"                { type = number, default = 3 }
-variable "log_retention_days"     { type = number, default = 14 }
+variable "source_file" { 
+  type    = string
+  default = "./src/lambda_function.py" 
+}
 
-# anstelle fixer ARNs — portable Eingaben:
+variable "filename" { 
+  type    = string
+  default = "" 
+}
+
+variable "memory_size" { 
+  type    = number
+  default = 128 
+}
+
+variable "ephemeral_storage_size" { 
+  type    = number
+  default = 512 
+}
+
+variable "timeout" { 
+  type    = number
+  default = 3 
+}
+
+variable "log_retention_days" { 
+  type    = number
+  default = 14 
+}
+
 variable "kms_key_alias" {
   description = "KMS alias for env vars encryption (e.g. alias/kms-tenant-master-key)"
   type        = string
   default     = "alias/kms-tenant-master-key"
 }
+
 variable "state_machine_name" {
   description = "Name der Step Functions State Machine"
   type        = string
   default     = "StepFunction3_EmailWorkFLow"
 }
 
-# Rolle
-variable "role_name_suffix" { type = string, default = "Lambda-role" }
+variable "role_name_suffix" { 
+  type    = string
+  default = "Lambda-role" 
+}
 
 variable "tags" {
   type    = map(string)
   default = { Project = "MiraeDrive", Stack = "lambda" }
 }
 
-############################################
+
 # Validations
-############################################
-validation {
-  condition     = var.use_archive || (length(var.filename) > 0)
-  error_message = "Wenn use_archive=false ist, muss 'filename' auf ein gültiges ZIP verweisen."
+
+
+# Hinweis: Validierung wurde zur besseren Strukturierung in die Variablenprüfung integriert
+# oder als check-block (TF 1.5+) realisiert. Hier als expliziter Check:
+locals {
+  validate_zip = (var.use_archive || length(var.filename) > 0) ? true : file("ERROR: Wenn use_archive=false ist, muss 'filename' angegeben werden.")
 }
 
-############################################
-# KMS-Key via Alias → echte Key-ARN
-############################################
+
+# KMS & Step Functions Data
+
+
 data "aws_kms_alias" "env_key" {
   name = var.kms_key_alias
 }
 
-############################################
-# Locals
-############################################
 locals {
   kms_key_arn       = data.aws_kms_alias.env_key.target_key_arn
   state_machine_arn = "arn:${data.aws_partition.current.partition}:states:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:stateMachine:${var.state_machine_name}"
 }
 
-############################################
-# IAM Trust
-############################################
+
+# IAM Role & Policies
+
+
 data "aws_iam_policy_document" "assume_lambda" {
   statement {
     effect = "Allow"
-    principals { type = "Service", identifiers = ["lambda.amazonaws.com"] }
-    actions   = ["sts:AssumeRole"]
+    principals { 
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"] 
+    }
+    actions = ["sts:AssumeRole"]
   }
 }
 
@@ -84,56 +115,59 @@ resource "aws_iam_role" "lambda_role" {
   tags               = var.tags
 }
 
-# CloudWatch Logs (AWS Managed Policy)
 resource "aws_iam_role_policy_attachment" "basic_exec" {
   role       = aws_iam_role.lambda_role.name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# KMS – typische 7 Aktionen, auf den dynamischen Key
+# KMS Access Policy
+data "aws_iam_policy_document" "kms_access" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt", "kms:DescribeKey", "kms:Encrypt",
+      "kms:ReEncryptFrom", "kms:ReEncryptTo",
+      "kms:GenerateDataKey", "kms:GenerateDataKeyWithoutPlaintext"
+    ]
+    resources = [local.kms_key_arn]
+  }
+}
+
 resource "aws_iam_role_policy" "kms_access" {
-  name = "LambdaKmsAccess"
-  role = aws_iam_role.lambda_role.id
-  policy = jsonencode({
-    Version   = "2012-10-17",
-    Statement = [{
-      Effect   = "Allow",
-      Action   = [
-        "kms:Decrypt","kms:DescribeKey","kms:Encrypt",
-        "kms:ReEncryptFrom","kms:ReEncryptTo",
-        "kms:GenerateDataKey","kms:GenerateDataKeyWithoutPlaintext"
-      ],
-      Resource = local.kms_key_arn
-    }]
-  })
+  name   = "LambdaKmsAccess"
+  role   = aws_iam_role.lambda_role.id
+  policy = data.aws_iam_policy_document.kms_access.json
 }
 
-# Step Functions – StartExecution auf die dynamisch gebaute ARN
+# Step Functions Invoke Policy
+data "aws_iam_policy_document" "sfn_invoke" {
+  statement {
+    effect    = "Allow"
+    actions   = ["states:StartExecution"]
+    resources = [local.state_machine_arn]
+  }
+}
+
 resource "aws_iam_role_policy" "stepfunctions_invoke" {
-  name = "LambdaStartStepFunction"
-  role = aws_iam_role.lambda_role.id
-  policy = jsonencode({
-    Version   = "2012-10-17",
-    Statement = [{
-      Effect   = "Allow",
-      Action   = ["states:StartExecution"],
-      Resource = local.state_machine_arn
-    }]
-  })
+  name   = "LambdaStartStepFunction"
+  role   = aws_iam_role.lambda_role.id
+  policy = data.aws_iam_policy_document.sfn_invoke.json
 }
 
-############################################
+
 # Logging
-############################################
+
+
 resource "aws_cloudwatch_log_group" "lg" {
   name              = "/aws/lambda/${var.function_name}"
   retention_in_days = var.log_retention_days
   tags              = var.tags
 }
 
-############################################
-# Packaging (optional)
-############################################
+
+# Packaging
+
+
 data "archive_file" "pkg" {
   count       = var.use_archive ? 1 : 0
   type        = "zip"
@@ -142,13 +176,14 @@ data "archive_file" "pkg" {
 }
 
 locals {
-  code_filename    = var.use_archive ? data.archive_file.pkg[0].output_path         : var.filename
+  code_filename    = var.use_archive ? data.archive_file.pkg[0].output_path     : var.filename
   code_source_hash = var.use_archive ? data.archive_file.pkg[0].output_base64sha256 : filebase64sha256(var.filename)
 }
 
-############################################
+
 # Lambda Function
-############################################
+
+
 resource "aws_lambda_function" "fn" {
   function_name = var.function_name
   role          = aws_iam_role.lambda_role.arn
@@ -172,16 +207,15 @@ resource "aws_lambda_function" "fn" {
 
   depends_on = [
     aws_cloudwatch_log_group.lg,
-    aws_iam_role_policy_attachment.basic_exec,
-    aws_iam_role_policy.kms_access,
-    aws_iam_role_policy.stepfunctions_invoke
+    aws_iam_role_policy_attachment.basic_exec
   ]
 
   tags = var.tags
 }
 
-############################################
+
 # Outputs
-############################################
+
+
 output "lambda_function_arn" { value = aws_lambda_function.fn.arn }
 output "lambda_role_arn"     { value = aws_iam_role.lambda_role.arn }
