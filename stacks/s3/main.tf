@@ -32,7 +32,15 @@ module "s3" {
   tags = var.tags
 }
 
-output "bucket_name"      { value = module.s3.bucket_name }
-output "bucket_arn"       { value = module.s3.bucket_arn }
-output "regional_domain"  { value = module.s3.regional_domain }
-output "website_endpoint" { value = module.s3.website_endpoint }
+output "bucket_name" {
+  value = module.s3.bucket_name
+}
+output "bucket_arn" {
+  value = module.s3.bucket_arn
+}
+output "regional_domain" {
+  value = module.s3.regional_domain
+}
+output "website_endpoint" {
+  value = module.s3.website_endpoint
+}
