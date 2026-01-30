@@ -1,120 +1,139 @@
-############################
-# Data sources (für Multi-Account/Region)
-############################
+# Module: IAM-MultiTenant-ABAC-Role
+
+
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0.0"
+    }
+  }
+}
+
+
+# Data Sources
+
 data "aws_caller_identity" "current" {}
-data "aws_partition" "current" {}
-data "aws_region" "current" {}
+data "aws_partition"       "current" {}
+data "aws_region"          "current" {}
 
-############################
+
 # Inputs
-############################
-variable "role_name" {
-  description = "Name der IAM Rolle (z.B. TenantRole)"
-  type        = string
 
+variable "role_name" {
+  type        = string
+  description = "Name der IAM Rolle (z.B. MiraeDrive-Tenant-Role)"
   validation {
-    condition     = length(trim(var.role_name)) > 0
+    condition     = length(trim(var.role_name, " ")) > 0
     error_message = "role_name darf nicht leer sein."
   }
 }
 
 variable "role_path" {
-  description = "IAM Role path"
-  type        = string
-  default     = "/"
+  type    = string
+  default = "/"
 }
 
 variable "bucket" {
-  description = "S3 Bucket-Name, in dem die tenant-spezifischen Prefixe liegen (z.B. miraedrive-assets)"
   type        = string
-
+  description = "S3 Bucket-Name für die Mandantendaten"
   validation {
-    condition     = length(trim(var.bucket)) > 0
+    condition     = length(trim(var.bucket, " ")) > 0
     error_message = "bucket darf nicht leer sein."
   }
 }
 
-# Optional: zusätzliche Principals, die die Rolle annehmen dürfen.
-# Wenn leer, vertraut man standardmäßig dem Root des aktuellen Accounts.
 variable "trusted_principals" {
-  description = "Zusätzliche IAM-Principals (ARNs), die die Rolle annehmen dürfen. Wenn leer, wird root des aktuellen Accounts verwendet."
   type        = list(string)
   default     = []
+  description = "Optionale Liste von ARNs, die die Rolle annehmen dürfen. Standard: Root des Accounts."
 }
 
 variable "tags" {
-  description = "Zusätzliche Tags"
-  type        = map(string)
-  default     = {}
+  type    = map(string)
+  default = {}
 }
 
-############################
+
 # Locals
-############################
+
 locals {
   partition  = data.aws_partition.current.partition
-  region     = data.aws_region.current.name
   account_id = data.aws_caller_identity.current.account_id
+  
+  # Wenn keine Principals angegeben sind, vertraue dem eigenen Account (Root)
+  trustees = length(var.trusted_principals) > 0 ? var.trusted_principals : ["arn:${local.partition}:iam::${local.account_id}:root"]
 
-  # Standard-Trust: Root des aktuellen Accounts
-  default_trustees = ["arn:${local.partition}:iam::${local.account_id}:root"]
-
-  trustees = length(var.trusted_principals) > 0 ? var.trusted_principals : local.default_trustees
-
-  # Für S3-Policy
   bucket_arn = "arn:${local.partition}:s3:::${var.bucket}"
 
-  # WICHTIG: so bleibt ${aws:PrincipalTag/TenantID} LITERAL in der Policy
-  tenant_tag_var = "$${aws:PrincipalTag/TenantID}"
+  # Verhindert, dass Terraform das $${...} als eigene Variable interpoliert
+  # AWS liest dies später als: ${aws:PrincipalTag/TenantID}
+  tenant_tag_context = "$${aws:PrincipalTag/TenantID}"
 }
 
-############################
-# Trust policy
-############################
+
+# Trust Policy (mit ABAC-Enforcement)
+
 data "aws_iam_policy_document" "trust" {
   statement {
+    sid     = "AllowAssumeWithTenantContext"
     effect  = "Allow"
-    actions = ["sts:AssumeRole"]
+    actions = [
+      "sts:AssumeRole",
+      "sts:TagSession" # Notwendig, um PrincipalTags an die Session zu binden
+    ]
 
     principals {
       type        = "AWS"
       identifiers = local.trustees
     }
+
+    # Sicherheit: Rolle kann nur genutzt werden, wenn eine TenantID im Kontext existiert
+    condition {
+      test     = "StringLike"
+      variable = "aws:PrincipalTag/TenantID"
+      values   = ["*"]
+    }
   }
 }
 
-############################
-# Inline-Policy: TenantRoleS3AccessPolicy
-#  - S3:GetObject/PutObject auf bucket/${aws:PrincipalTag/TenantID}/*
-#  - ListBucket eingeschränkt auf prefix=${aws:PrincipalTag/TenantID}/*
-############################
+
+# Inline-Policy: Dynamische S3-Isolierung
+
 data "aws_iam_policy_document" "tenant_s3" {
+  # Zugriff auf die Objekte innerhalb des Tenant-Prefix
   statement {
-    sid     = "S3TenantAccess"
-    effect  = "Allow"
-    actions = ["s3:GetObject", "s3:PutObject"]
+    sid    = "S3TenantObjectAccess"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject" # Optional, falls Löschen erlaubt sein soll
+    ]
     resources = [
-      "${local.bucket_arn}/${local.tenant_tag_var}/*"
+      "${local.bucket_arn}/${local.tenant_tag_context}/*"
     ]
   }
 
+  # Erlaubt das Auflisten des Buckets, aber NUR für den eigenen Prefix
   statement {
-    sid     = "ListTenantPrefix"
-    effect  = "Allow"
+    sid    = "ListTenantPrefixOnly"
+    effect = "Allow"
     actions = ["s3:ListBucket"]
     resources = [local.bucket_arn]
 
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
-      values   = ["${local.tenant_tag_var}/*"]
+      values   = ["${local.tenant_tag_context}/*"]
     }
   }
 }
 
-############################
-# Role
-############################
+
+# Resource Creation
+
 resource "aws_iam_role" "this" {
   name               = var.role_name
   path               = var.role_path
@@ -123,20 +142,13 @@ resource "aws_iam_role" "this" {
 }
 
 resource "aws_iam_role_policy" "tenant_policy" {
-  name   = "TenantRoleS3AccessPolicy"
+  name   = "TenantIsolationPolicy"
   role   = aws_iam_role.this.id
   policy = data.aws_iam_policy_document.tenant_s3.json
 }
 
-############################
-# Outputs
-############################
-output "role_name" {
-  description = "Rollenname"
-  value       = aws_iam_role.this.name
-}
 
-output "role_arn" {
-  description = "Rollen-ARN"
-  value       = aws_iam_role.this.arn
-}
+# Outputs
+
+output "role_name" { value = aws_iam_role.this.name }
+output "role_arn"  { value = aws_iam_role.this.arn }
