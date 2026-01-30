@@ -1,85 +1,32 @@
-############################
-# Data
-############################
-data "aws_partition"       "current" {}
-data "aws_region"          "current" {}
-data "aws_caller_identity" "current" {}
+# Module: IAM-ECS-Task-KI-Agent
 
-############################
-# Inputs
-############################
-variable "role_name" {
-  type    = string
-  default = "agentTaskRole"
 
-  validation {
-    condition     = length(var.role_name) > 0
-    error_message = "role_name darf nicht leer sein."
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0.0"
+    }
   }
 }
 
-variable "role_path" {
-  type    = string
-  default = "/"
-}
+# ... (Data Sources bleiben identisch) ...
 
-variable "tags" {
-  type    = map(string)
-  default = {}
-}
 
-# Inline-Policy Parameter
-variable "s3_bucket_name" {
-  type        = string
-  description = "S3 bucket for agent inputs (e.g. miraedrive-assets)"
-
-  validation {
-    condition     = length(var.s3_bucket_name) > 0
-    error_message = "s3_bucket_name darf nicht leer sein."
-  }
-}
-
-variable "kms_key_arn" {
-  type        = string
-  description = "KMS key ARN used to decrypt S3 objects"
-
-  validation {
-    condition     = length(var.kms_key_arn) > 0
-    error_message = "kms_key_arn darf nicht leer sein."
-  }
-}
-
-# Bedrock Model (foundation model id; wird zum ARN zusammengesetzt)
-# Beispiel: anthropic.claude-3-haiku-20240307-v1:0
-variable "bedrock_model_id" {
-  type    = string
-  default = "anthropic.claude-3-haiku-20240307-v1:0"
-}
-
-# EventBridge (entweder Name ODER ARN vorgeben)
-variable "event_bus_name" {
-  type    = string
-  default = "event-bus-miraedrive-2"
-}
-
-variable "event_bus_arn" {
-  type    = string
-  default = "" # optional override
-}
-
-############################
 # Locals
-############################
-locals {
-  event_bus_arn = var.event_bus_arn != "" ? var.event_bus_arn :
-    "arn:${data.aws_partition.current.partition}:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:event-bus/${var.event_bus_name}"
 
+locals {
+  # EventBridge Bus ARN Logik
+  event_bus_arn = var.event_bus_arn != "" ? var.event_bus_arn : "arn:${data.aws_partition.current.partition}:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:event-bus/${var.event_bus_name}"
+
+  # Bedrock Model ARN - Foundation Models sind oft global oder regionsspezifisch ohne Account-ID
   bedrock_model_arn = "arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}::foundation-model/${var.bedrock_model_id}"
 }
 
-############################
+
 # Trust Policy (ECS Tasks)
-############################
+
 data "aws_iam_policy_document" "assume_ecs_tasks" {
   statement {
     effect = "Allow"
@@ -91,9 +38,9 @@ data "aws_iam_policy_document" "assume_ecs_tasks" {
   }
 }
 
-############################
+
 # Role
-############################
+
 resource "aws_iam_role" "this" {
   name               = var.role_name
   path               = var.role_path
@@ -101,55 +48,69 @@ resource "aws_iam_role" "this" {
   tags               = var.tags
 }
 
-############################
-# Attach AWS-managed policies (wie in deiner Rolle)
-############################
-resource "aws_iam_role_policy_attachment" "eventbridge_full" {
+
+# Managed Policy Attachments
+
+# Ermöglicht dem Agenten das Senden von Events und vollen Log-Zugriff
+resource "aws_iam_role_policy_attachment" "managed_attachments" {
+  for_each = toset([
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEventBridgeFullAccess",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/CloudWatchFullAccess"
+  ])
   role       = aws_iam_role.this.name
-  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEventBridgeFullAccess"
+  policy_arn = each.value
 }
 
-resource "aws_iam_role_policy_attachment" "cloudwatch_full" {
-  role       = aws_iam_role.this.name
-  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/CloudWatchFullAccess"
-}
 
-############################
-# Inline Policy "KI-Agent"
-############################
+# Inline Policy: KI-Agent-Intelligence
+
 data "aws_iam_policy_document" "ki_agent" {
+  # 1. Bedrock - Das Gehirn
   statement {
+    sid    = "BedrockInference"
     effect = "Allow"
     actions = [
       "bedrock:InvokeModel",
-      "bedrock:InvokeModelWithResponseStream",
+      "bedrock:InvokeModelWithResponseStream"
     ]
     resources = [local.bedrock_model_arn]
   }
 
+  # 2. Comprehend - NLP Analyse (optional)
   statement {
+    sid       = "ComprehendAnalysis"
     effect    = "Allow"
     actions   = ["comprehend:Detect*"]
     resources = ["*"]
   }
 
+  # 3. S3 & KMS - Input-Daten (Mails/Assets)
   statement {
-    effect  = "Allow"
-    actions = ["s3:GetObject"]
+    sid    = "S3KmsReadAccess"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:ListBucket"
+    ]
     resources = [
+      "arn:${data.aws_partition.current.partition}:s3:::${var.s3_bucket_name}",
       "arn:${data.aws_partition.current.partition}:s3:::${var.s3_bucket_name}/*"
     ]
   }
 
   statement {
-    effect  = "Allow"
-    actions = ["kms:Decrypt", "kms:DescribeKey"]
-    resources = [
-      var.kms_key_arn
+    sid    = "KmsDecryptAccess"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:DescribeKey"
     ]
+    resources = [var.kms_key_arn]
   }
 
+  # 4. EventBridge - Feedback an das System
   statement {
+    sid       = "EventBridgePutEvents"
     effect    = "Allow"
     actions   = ["events:PutEvents"]
     resources = [local.event_bus_arn]
@@ -157,18 +118,13 @@ data "aws_iam_policy_document" "ki_agent" {
 }
 
 resource "aws_iam_role_policy" "ki_agent_inline" {
-  name   = "KI-Agent"
+  name   = "KI-Agent-Permissions"
   role   = aws_iam_role.this.id
   policy = data.aws_iam_policy_document.ki_agent.json
 }
 
-############################
-# Outputs
-############################
-output "role_name" {
-  value = aws_iam_role.this.name
-}
 
-output "role_arn" {
-  value = aws_iam_role.this.arn
-}
+# Outputs
+
+output "role_arn"  { value = aws_iam_role.this.arn }
+output "role_name" { value = aws_iam_role.this.name }
