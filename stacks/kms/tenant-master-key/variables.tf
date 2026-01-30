@@ -59,6 +59,6 @@ variable "tags" {
     Projekt   = "MiraeDrive"
     Umgebung  = "Produktiv"
     Component = "kms-tenant-master-key"
-    TenantID = ""
+    TenantID  = ""
   }
 }
