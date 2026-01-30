@@ -1,48 +1,51 @@
-# Module: S3-Universal-Assets
+# Module: S3-Universal-Assets (MiraeDrive Core)
 
+
+terraform {
+  required_version = ">= 1.5.0"
+}
 
 data "aws_caller_identity" "current" {}
 data "aws_partition"       "current" {}
-data "aws_region"          "current" {}
 
 
 # Inputs
 
+variable "bucket_name" { 
+  type = string 
+  validation {
+    condition     = length(var.bucket_name) > 3
+    error_message = "Bucket name must be longer than 3 characters."
+  }
+}
 
-variable "bucket_name"            { type = string }
-variable "enable_versioning"      { type = bool,   default = true }
-variable "enable_eventbridge"     { type = bool,   default = true }
-variable "enable_website"         { type = bool,   default = false } # Meist via CloudFront
+variable "enable_versioning"  { type = bool, default = true }
+variable "enable_eventbridge" { type = bool, default = true }
+variable "enable_website"     { type = bool, default = false }
 variable "website_index_document" { type = string, default = "index.html" }
 variable "website_error_document" { type = string, default = "error.html" }
+variable "force_destroy"      { type = bool, default = false }
 
-variable "force_destroy"          { type = bool,   default = false }
-
-# Block Public Access (Sicherheit geht vor)
+# Sicherheitseinstellungen
 variable "block_public_acls"       { type = bool, default = true }
 variable "block_public_policy"     { type = bool, default = true }
 variable "ignore_public_acls"      { type = bool, default = true }
 variable "restrict_public_buckets" { type = bool, default = true }
 
-# --- Policy Parameter ---
+# Policy Parameter
 variable "cloudfront_distribution_arns" { type = list(string), default = [] }
-
 variable "logs_delivery_source_arn"     { type = string, default = "" }
-variable "logs_account_id"              { type = string, default = "" }
-variable "logs_prefix"                  { type = string, default = "AWSLogs/" }
-
-variable "ses_receipt_rule_arn"         { type = string, default = "" }
-variable "ses_account_id"               { type = string, default = "" }
-variable "ses_prefix"                   { type = string, default = "emails/" }
-
-variable "tenant_role_arn"              { type = string, default = "" }
-variable "tenant_tag_pattern"           { type = string, default = "tenant*" }
-
-variable "tags" { type = map(string), default = {} }
+variable "logs_account_id"               { type = string, default = "" }
+variable "logs_prefix"                   { type = string, default = "AWSLogs/" }
+variable "ses_receipt_rule_arn"          { type = string, default = "" }
+variable "ses_account_id"                { type = string, default = "" }
+variable "ses_prefix"                    { type = string, default = "emails/" }
+variable "tenant_role_arn"               { type = string, default = "" }
+variable "tenant_tag_pattern"            { type = string, default = "tenant*" }
+variable "tags"                          { type = map(string), default = {} }
 
 
 # Resources
-
 
 resource "aws_s3_bucket" "this" {
   bucket        = var.bucket_name
@@ -50,7 +53,6 @@ resource "aws_s3_bucket" "this" {
   tags          = var.tags
 }
 
-# Ownership (Wichtig für Cross-Account Logs & ACL-Kompatibilität)
 resource "aws_s3_bucket_ownership_controls" "this" {
   bucket = aws_s3_bucket.this.id
   rule {
@@ -98,9 +100,8 @@ resource "aws_s3_bucket_notification" "this" {
 
 # Dynamic Policy Generation
 
-
 locals {
-  # CloudFront OAC Statement
+  # 1. CloudFront OAC
   cf_stmt = length(var.cloudfront_distribution_arns) == 0 ? [] : [{
     Sid       = "AllowCloudFrontOAC"
     Effect    = "Allow"
@@ -110,7 +111,7 @@ locals {
     Condition = { ArnLike = { "AWS:SourceArn" = var.cloudfront_distribution_arns } }
   }]
 
-  # Log Delivery Statement (z.B. für CloudTrail/ALB Logs)
+  # 2. Log Delivery
   logs_stmt = var.logs_delivery_source_arn == "" ? [] : [{
     Sid       = "AWSLogDeliveryWrite"
     Effect    = "Allow"
@@ -126,7 +127,7 @@ locals {
     }
   }]
 
-  # SES Receipt Statement
+  # 3. SES Receipt
   ses_stmt = var.ses_receipt_rule_arn == "" ? [] : [{
     Sid       = "AllowSESPutObject"
     Effect    = "Allow"
@@ -136,12 +137,12 @@ locals {
     Condition = {
       StringEquals = {
         "AWS:SourceArn"     = var.ses_receipt_rule_arn
-        "AWS:SourceAccount" = var.ses_account_id
+        "AWS:SourceAccount" = var.ses_account_id != "" ? var.ses_account_id : data.aws_caller_identity.current.account_id
       }
     }
   }]
 
-  # Tenant Isolation Statement (MiraeDrive Core Feature)
+  # 4. Tenant ABAC (Literal $ escaping für jsonencode)
   tenant_stmt = var.tenant_role_arn == "" ? [] : [{
     Sid       = "TenantScopedAccess"
     Effect    = "Allow"
@@ -151,28 +152,30 @@ locals {
       aws_s3_bucket.this.arn,
       "${aws_s3_bucket.this.arn}/$${aws:PrincipalTag/TenantID}/*"
     ]
-    Condition = { StringLike = { "aws:PrincipalTag/TenantID" = var.tenant_tag_pattern } }
+    Condition = { 
+      StringLike = { "aws:PrincipalTag/TenantID" = var.tenant_tag_pattern } 
+    }
   }]
 
-  full_policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = concat(local.cf_stmt, local.logs_stmt, local.ses_stmt, local.tenant_stmt)
-  })
+  # Policy Assembly
+  all_statements = concat(local.cf_stmt, local.logs_stmt, local.ses_stmt, local.tenant_stmt)
 }
 
 resource "aws_s3_bucket_policy" "this" {
-  # Nur erstellen, wenn mindestens ein Statement vorhanden ist
-  count  = length(concat(local.cf_stmt, local.logs_stmt, local.ses_stmt, local.tenant_stmt)) > 0 ? 1 : 0
+  count  = length(local.all_statements) > 0 ? 1 : 0
   bucket = aws_s3_bucket.this.id
-  policy = local.full_policy
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = local.all_statements
+  })
 
+  # WICHTIG: Erst Public Access blocken, dann Policy schreiben
   depends_on = [aws_s3_bucket_public_access_block.this]
 }
 
 
 # Outputs
 
-
-output "bucket_name"      { value = aws_s3_bucket.this.bucket }
-output "bucket_arn"       { value = aws_s3_bucket.this.arn }
-output "website_endpoint" { value = var.enable_website ? aws_s3_bucket_website_configuration.this[0].website_endpoint : null }
+output "bucket_name"     { value = aws_s3_bucket.this.bucket }
+output "bucket_arn"      { value = aws_s3_bucket.this.arn }
+output "website_endpoint" { value = var.enable_website ? try(aws_s3_bucket_website_configuration.this[0].website_endpoint, null) : null }
