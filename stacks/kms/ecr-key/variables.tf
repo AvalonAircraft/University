@@ -5,21 +5,21 @@ variable "region" {
 }
 
 variable "alias_name" {
-  description = "Alias ohne 'alias/', z.B. 'ECR_Key'"
+  description = "Alias ohne 'alias/', z.B. 'ecr-key'"
   type        = string
-  default     = "ECR_Key"
+  default     = "ecr-key"
 }
 
 variable "description" {
   description = "Beschreibung des Keys"
   type        = string
-  default     = "KMS key fuer ECR repository entschluesselung"
+  default     = "KMS key for ECR repository encryption/decryption"
 }
 
 variable "enable_multi_region" {
   description = "Multi-Region-Key?"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "repository_arn" {
@@ -31,9 +31,9 @@ variable "tags" {
   description = "Zusätzliche Tags"
   type        = map(string)
   default = {
-    Projekt   = "MiraeDrive"
-    Umgebung  = "Produktiv"
-    Component = "ecr-key"
-    TenantID = ""
+    Project     = "University"
+    Environment = "Dev"
+    Component   = "ecr-key"
+    TenantID    = ""
   }
 }
