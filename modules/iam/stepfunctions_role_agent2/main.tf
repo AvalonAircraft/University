@@ -1,26 +1,29 @@
-############################
-# Inputs
-############################
-variable "role_name"          { type = string }                      # z.B. "StepFunctions-AgentStepFunction2-role"
-variable "role_path"          { type = string,  default = "/service-role/" }
-variable "lambda_resources"   { type = list(string) }                # erlaubte Lambda-ARNs (scoped, wildcard ok)
-variable "log_group_arns"     { type = list(string) }                # Ziel-LogGroups (für Put*; Create braucht *)
-variable "tags"               { type = map(string), default = {} }
+# Module: IAM-StepFunctions-Orchestrator-V2
 
-# Optional: Wenn ich zentrale Policies anhängen möchte, nicht neu erstellen
-variable "create_managed_policies"      { type = bool,        default = true }
-variable "existing_managed_policy_arns" { type = list(string), default = [] }
+
+terraform {
+  required_version = ">= 1.5.0"
+}
 
 data "aws_partition" "current" {}
-data "aws_region"     "current" {}
-data "aws_caller_identity" "current" {}
 
-############################
-# Trust policy (Step Functions)
-############################
+
+# Inputs
+
+variable "role_name"        { type = string }
+variable "role_path"        { type = string, default = "/service-role/" }
+variable "lambda_resources" { type = list(string) }
+variable "log_group_arns"   { type = list(string) }
+variable "tags"             { type = map(string), default = {} }
+
+variable "create_managed_policies"      { type = bool, default = true }
+variable "existing_managed_policy_arns" { type = list(string), default = [] }
+
+
+# Trust Policy
+
 data "aws_iam_policy_document" "trust_states" {
   statement {
-    effect  = "Allow"
     actions = ["sts:AssumeRole"]
     principals {
       type        = "Service"
@@ -29,23 +32,20 @@ data "aws_iam_policy_document" "trust_states" {
   }
 }
 
-############################
-# Managed Policy (local): CloudWatch Logs delivery
-# HINWEIS:
-# - logs:CreateLogGroup MUSS Resource="*" haben (LogGroup existiert noch nicht).
-# - Für CreateLogStream/PutLogEvents/PutRetentionPolicy darf/muss ich einschränken.
-############################
+
+# Managed Policies (Local)
+
+
+# 1. CloudWatch Logs
 data "aws_iam_policy_document" "cw_logs" {
   statement {
-    sid     = "LogsCreateGroup"
-    effect  = "Allow"
-    actions = ["logs:CreateLogGroup"]
+    sid       = "AllowLogGroupCreation"
+    actions   = ["logs:CreateLogGroup"]
     resources = ["*"]
   }
   statement {
-    sid     = "LogsWriteToGroups"
-    effect  = "Allow"
-    actions = [
+    sid       = "AllowLogWriting"
+    actions   = [
       "logs:CreateLogStream",
       "logs:PutLogEvents",
       "logs:PutRetentionPolicy",
@@ -57,87 +57,47 @@ data "aws_iam_policy_document" "cw_logs" {
 }
 
 resource "aws_iam_policy" "cw_logs" {
-  count       = var.create_managed_policies ? 1 : 0
-  name        = "StepFn-CloudWatchLogsAccess"
-  description = "Allow Step Functions to create/write to specified CloudWatch Logs groups"
-  policy      = data.aws_iam_policy_document.cw_logs.json
+  count  = var.create_managed_policies ? 1 : 0
+  name   = "StepFn-Logs-${var.role_name}"
+  policy = data.aws_iam_policy_document.cw_logs.json
 }
 
-############################
-# Managed Policy (local): Lambda Invoke scoped
-############################
-data "aws_iam_policy_document" "lambda_invoke_scoped" {
+# 2. Lambda Invoke
+data "aws_iam_policy_document" "lambda_invoke" {
   statement {
-    sid     = "InvokeAllowedLambdas"
-    effect  = "Allow"
-    actions = [
-      "lambda:InvokeFunction",
-      "lambda:InvokeAsync"
-    ]
+    actions   = ["lambda:InvokeFunction", "lambda:InvokeAsync"]
     resources = var.lambda_resources
   }
 }
 
-resource "aws_iam_policy" "lambda_invoke_scoped" {
-  count       = var.create_managed_policies ? 1 : 0
-  name        = "StepFn-LambdaInvokeScoped"
-  description = "Allow Step Functions to invoke specific Lambda functions (scoped)"
-  policy      = data.aws_iam_policy_document.lambda_invoke_scoped.json
+resource "aws_iam_policy" "lambda_invoke" {
+  count  = var.create_managed_policies ? 1 : 0
+  name   = "StepFn-Invoke-${var.role_name}"
+  policy = data.aws_iam_policy_document.lambda_invoke.json
 }
 
-############################
-# Managed Policy (local): X-Ray
-############################
+# 3. X-Ray
 data "aws_iam_policy_document" "xray" {
   statement {
-    sid     = "XRayAccess"
-    effect  = "Allow"
-    actions = [
+    actions   = [
       "xray:PutTraceSegments",
       "xray:PutTelemetryRecords",
       "xray:GetSamplingRules",
-      "xray:GetSamplingTargets",
-      "xray:GetSamplingStatisticSummaries"
+      "xray:GetSamplingTargets"
     ]
     resources = ["*"]
   }
 }
 
 resource "aws_iam_policy" "xray" {
-  count       = var.create_managed_policies ? 1 : 0
-  name        = "StepFn-XRayAccess"
-  description = "Allow Step Functions to send X-Ray traces/telemetry"
-  policy      = data.aws_iam_policy_document.xray.json
+  count  = var.create_managed_policies ? 1 : 0
+  name   = "StepFn-XRay-${var.role_name}"
+  policy = data.aws_iam_policy_document.xray.json
 }
 
-############################
-# Inline Policy: Logs Fallback (nur minimal: Create + Put auf *)
-# (Optional; ich lasse sie drin, weil deine Konsole das auch hatte)
-############################
-data "aws_iam_policy_document" "inline_lambda" {
-  statement {
-    effect  = "Allow"
-    actions = [
-      "lambda:InvokeFunction",
-      "lambda:InvokeAsync"
-    ]
-    resources = var.lambda_resources
-  }
 
-  statement {
-    effect  = "Allow"
-    actions = [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents"
-    ]
-    resources = ["*"]
-  }
-}
+# Role Execution
 
-############################
-# Role + Attachments
-############################
 resource "aws_iam_role" "this" {
   name               = var.role_name
   path               = var.role_path
@@ -145,41 +105,25 @@ resource "aws_iam_role" "this" {
   tags               = var.tags
 }
 
-# Inline-Policy "Lambda"
-resource "aws_iam_role_policy" "inline_lambda" {
-  name   = "Lambda"
-  role   = aws_iam_role.this.id
-  policy = data.aws_iam_policy_document.inline_lambda.json
+# Wir nutzen ein dynamisches Set an Attachments, um den Code DRY zu halten
+locals {
+  local_policy_arns = var.create_managed_policies ? [
+    aws_iam_policy.cw_logs[0].arn,
+    aws_iam_policy.lambda_invoke[0].arn,
+    aws_iam_policy.xray[0].arn
+  ] : []
+  
+  all_policy_arns = concat(local_local_policy_arns, var.existing_managed_policy_arns)
 }
 
-# Attach locally-created managed policies (optional)
-resource "aws_iam_role_policy_attachment" "attach_cw" {
-  count      = var.create_managed_policies ? 1 : 0
-  role       = aws_iam_role.this.name
-  policy_arn = aws_iam_policy.cw_logs[0].arn
-}
-
-resource "aws_iam_role_policy_attachment" "attach_lambda_invoke_scoped" {
-  count      = var.create_managed_policies ? 1 : 0
-  role       = aws_iam_role.this.name
-  policy_arn = aws_iam_policy.lambda_invoke_scoped[0].arn
-}
-
-resource "aws_iam_role_policy_attachment" "attach_xray" {
-  count      = var.create_managed_policies ? 1 : 0
-  role       = aws_iam_role.this.name
-  policy_arn = aws_iam_policy.xray[0].arn
-}
-
-# Attach centrally-managed policies (falls übergeben)
-resource "aws_iam_role_policy_attachment" "attach_existing" {
-  for_each   = toset(var.existing_managed_policy_arns)
+resource "aws_iam_role_policy_attachment" "unified" {
+  for_each   = toset(local.all_policy_arns)
   role       = aws_iam_role.this.name
   policy_arn = each.value
 }
 
-############################
+
 # Outputs
-############################
+
 output "role_name" { value = aws_iam_role.this.name }
-output "role_arn"  { value = aws_iam_role.this.arn  }
+output "role_arn"  { value = aws_iam_role.this.arn }
