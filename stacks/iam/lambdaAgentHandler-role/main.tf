@@ -5,7 +5,7 @@ provider "aws" {
 }
 
 
-# Data sources
+# Data Sources
 
 data "aws_partition" "current" {}
 
@@ -30,7 +30,7 @@ module "role_lambda_agent_handler" {
   source = "../../../modules/iam/lambdaAgentHandler-role"
 
   role_name   = var.role_name
-  role_path   = "/service-role/"
+  role_path   = var.role_path
   policy_arns = local.effective_policy_arns
   tags        = var.tags
 }
@@ -38,5 +38,10 @@ module "role_lambda_agent_handler" {
 
 # Outputs
 
-output "role_name" { value = module.role_lambda_agent_handler.role_name }
-output "role_arn"  { value = module.role_lambda_agent_handler.role_arn }
+output "role_name" {
+  value = module.role_lambda_agent_handler.role_name
+}
+
+output "role_arn" {
+  value = module.role_lambda_agent_handler.role_arn
+}
