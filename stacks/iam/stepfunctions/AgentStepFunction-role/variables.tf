@@ -1,16 +1,31 @@
-data "aws_caller_identity" "current" {}
-data "aws_partition" "current" {}
-data "aws_region" "current" {}
+# Region
 
-variable "region" { type = string, default = "us-east-1" }
+variable "region" {
+  type    = string
+  default = "us-east-1"
+}
 
-# Generischer Rollenname (keine zufällige Suffix-GUID)
+
+# Role
+
+# Generischer Rollenname (keine zufällige GUID)
 variable "role_name" {
   type    = string
   default = "StepFunctions-AgentStepFunction-role"
 }
 
+# Pfad als Variable (portabler, je nach Konvention /service-role/ oder /)
+variable "role_path" {
+  type    = string
+  default = "/service-role/"
+}
+
+
 # Lambdas, die die State Machine aufruft
+
+# WICHTIG:
+# - In einem anderen Account heißen die Lambdas ggf. anders.
+# - Daher solltest du sie im Ziel-Account per tfvars überschreiben.
 variable "lambda_arns" {
   type = list(string)
   default = [
@@ -18,32 +33,37 @@ variable "lambda_arns" {
   ]
 }
 
-# CloudWatch LogGroups, in die protokolliert wird
+
+# CloudWatch LogGroups für StepFunctions Logging
+
+# WICHTIG:
+# - LogGroup-Namen sind in anderen Accounts oft anders.
+# - Daher idealerweise im Ziel-Account per tfvars überschreiben.
 variable "log_group_arns" {
   type = list(string)
   default = [
-    # passe ggf. an den tatsächlichen LogGroup-Namen deiner State Machine an
     "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vendedlogs/states/MyStateMachine-Logs:*"
   ]
 }
 
-# Schalter für Policy-Erstellung im Modul
+
+# Policy Strategy
+
+# true  => Modul erstellt Managed Policies selbst
+# false => Modul hängt nur existing_managed_policy_arns an
 variable "create_managed_policies" {
   type    = bool
   default = true
 }
 
-# Falls ich stattdessen zentral verwaltete Policies anhängen will
+# Falls du zentral verwaltete Policies anhängen willst (im Ziel-Account pflegen)
 variable "existing_managed_policy_arns" {
   type    = list(string)
   default = []
-  # Beispiel:
-  # default = [
-  #   "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:policy/Central-StepFn-Logs",
-  #   "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:policy/Central-StepFn-LambdaInvoke",
-  #   "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:policy/Central-StepFn-XRay"
-  # ]
 }
+
+
+# Tags
 
 variable "tags" {
   type = map(string)
@@ -51,6 +71,6 @@ variable "tags" {
     Projekt         = "MiraeDrive"
     "StartUp-Modus" = "true"
     Umgebung        = "Produktiv"
-    TenantID = ""
+    TenantID        = ""
   }
 }
