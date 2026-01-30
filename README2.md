@@ -691,7 +691,6 @@ aws logs create-log-group --log-group-name "/aws/stepfunctions/AgentStepFunction
 
 ### 20.3 StepFunctions deploy (Skript-Logik)
 
-(Hier wird das bestehende Bash-Skript aus deiner Vorlage zur Validierung der Variablen genutzt.)
 
 ---
 
