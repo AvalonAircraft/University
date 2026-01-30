@@ -1,17 +1,31 @@
-data "aws_caller_identity" "current" {}
-data "aws_partition" "current" {}
-data "aws_region" "current" {}
+# Region
 
-variable "region" { type = string, default = "us-east-1" }
+variable "region" {
+  type    = string
+  default = "us-east-1"
+}
 
-# Kein GUID-Suffix im Default – so kann ich die Rolle in jedem Account deployen,
-# ohne Namenskollisionen mit vorhandenen, konsolen-erzeugten Rollen
+
+# Role
+
+# Kein GUID-Suffix im Default – portable & reproduzierbar
 variable "role_name" {
   type    = string
   default = "StepFunctions-AgentStepFunction2-role"
 }
 
-# Erlaubte Lambdas (meine Liste, aber aus Partition/Region/Account zusammengesetzt)
+# Pfad als Variable (statt hardcoded), damit du überall konsistent bist
+variable "role_path" {
+  type    = string
+  default = "/service-role/"
+}
+
+
+# Allowed Lambda Resources
+
+# NOTE:
+# - Das ist "breit" (Lambda:* etc.). Funktioniert, ist aber weniger least-privilege.
+# - Für echte Portabilität über mehrere Accounts: per tfvars überschreiben.
 variable "lambda_resources" {
   type = list(string)
   default = [
@@ -25,7 +39,9 @@ variable "lambda_resources" {
   ]
 }
 
-# LogGroup-ARNs: Express State Machines brauchen Logs – ich parametriere das
+
+# CloudWatch Log Groups (StepFunctions Logging)
+
 variable "log_group_arns" {
   type = list(string)
   default = [
@@ -33,23 +49,21 @@ variable "log_group_arns" {
   ]
 }
 
-# Schalter für Policy-Erstellung im Modul
+
+# Policy Strategy
+
 variable "create_managed_policies" {
   type    = bool
   default = true
 }
 
-# Falls ich stattdessen zentral verwaltete Policies anhängen will
 variable "existing_managed_policy_arns" {
   type    = list(string)
   default = []
-  # Beispiel:
-  # default = [
-  #   "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/Central-StepFn-Logs",
-  #   "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/Central-StepFn-LambdaInvoke",
-  #   "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/Central-StepFn-XRay"
-  # ]
 }
+
+
+# Tags
 
 variable "tags" {
   type = map(string)
@@ -57,6 +71,6 @@ variable "tags" {
     Projekt         = "MiraeDrive"
     "StartUp-Modus" = "true"
     Umgebung        = "Produktiv"
-    TenantID = ""
+    TenantID        = ""
   }
 }
