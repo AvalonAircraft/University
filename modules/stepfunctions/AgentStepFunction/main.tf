@@ -1,23 +1,33 @@
-############################
-# Data (agnostisch)
-############################
-data "aws_caller_identity" "current" {}
-data "aws_partition"       "current" {}
-data "aws_region"          "current" {}
+# Module: StepFunction-Orchestrator
 
-############################
+
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0.0"
+    }
+  }
+}
+
+
 # Inputs
-############################
+
+
 variable "state_machine_name" { type = string, default = "AgentStepFunction" }
 variable "tags"               { type = map(string), default = {} }
 
-# Bestehende IAM-Rolle (mit sfn:StartExecution, logs:CreateLogStream/PutLogEvents, lambda:InvokeFunction)
-variable "existing_role_arn"  { type = string }
+# Bestehende IAM-Rolle (muss sfn.amazonaws.com vertrauen)
+variable "existing_role_arn"  { 
+  type        = string 
+  description = "ARN der Rolle mit Lambda-, Log- und SFN-Berechtigungen."
+}
 
-# Direkte Lambda-ARN (wie von dir vorgegeben)
+# Lambda-ARN Integration
 variable "lambda6_fn_arn" {
   type    = string
-  default = "arn:${data.aws_partition.current.partition}:lambda:${data.aws_region.current.name}:123456789012:function:Lambda6_URL-Gen_DB_Saving_SQL-Query"
+  default = "arn:aws:lambda:eu-central-1:123456789012:function:Lambda6_URL-Gen_DB_Saving_SQL-Query"
 }
 
 # Task-Argumente
@@ -25,32 +35,36 @@ variable "argument_function_name" { type = string, default = "MyData" }
 
 # Logging
 variable "enable_logging"         { type = bool,   default = true }
-variable "log_level"              { type = string, default = "ALL" }     # ALL|ERROR|FATAL|OFF
+variable "log_level"              { type = string, default = "ALL" } 
 variable "include_execution_data" { type = bool,   default = true }
-
-# Vorhandene Log Group ARN (vollständige ARN inkl. log-group:... )
 variable "existing_log_group_arn" { type = string }
 
-############################
-# Definition (States JSON)
-############################
+
+# State Machine Definition (JSONata)
+
+
 locals {
   definition = jsonencode({
-    Comment       = "Lambda 6 (URL-Gen & DB-Speicherung + SQL Abfrage)"
-    StartAt       = "Lambda 6 (URL-Gen & DB-Speicherung + SQL Abfrage)"
+    Comment       = "MiraeDrive Orchestration: Lambda 6 (URL-Gen & SQL Query)"
+    StartAt       = "InvokeLambda6"
     QueryLanguage = "JSONata"
     States = {
-      "Lambda 6 (URL-Gen & DB-Speicherung + SQL Abfrage)" = {
+      "InvokeLambda6" = {
         Type     = "Task"
-        # exakt wie gefordert: direkte Lambda-ARN
         Resource = var.lambda6_fn_arn
-        # States v2 Felder wie von dir genutzt:
-        Output    = "{% $states.result.Payload %}"
+        # JSONata Extraktion des Payloads
+        Output   = "{% $states.result.Payload %}"
         Arguments = {
           FunctionName = var.argument_function_name
+          # Hier können weitere Input-Daten gemappt werden
         }
         Retry = [{
-          ErrorEquals     = ["Lambda.ServiceException","Lambda.AWSLambdaException","Lambda.SdkClientException","Lambda.TooManyRequestsException"]
+          ErrorEquals     = [
+            "Lambda.ServiceException", 
+            "Lambda.AWSLambdaException", 
+            "Lambda.SdkClientException", 
+            "Lambda.TooManyRequestsException"
+          ]
           IntervalSeconds = 1
           MaxAttempts     = 3
           BackoffRate     = 2
@@ -62,33 +76,37 @@ locals {
   })
 }
 
-############################
+
 # State Machine (EXPRESS)
-############################
+
+
 resource "aws_sfn_state_machine" "this" {
-  name       = var.state_machine_name
-  type       = "EXPRESS"
-  role_arn   = var.existing_role_arn
+  name     = var.state_machine_name
+  type     = "EXPRESS"
+  role_arn = var.existing_role_arn
+
   definition = local.definition
 
-  # Optionales Logging
   dynamic "logging_configuration" {
     for_each = var.enable_logging ? [1] : []
     content {
       include_execution_data = var.include_execution_data
       level                  = var.log_level
-      # Muss eine LogGroup-ARN sein (kein Name)
+      # WICHTIG: Erwartet ARN der Log-Group (muss :* am Ende haben, falls nicht von Data Source geliefert)
       log_destination        = var.existing_log_group_arn
     }
   }
 
-  # (Optional) Tracing kann hier später ergänzt werden
-  tags = merge(var.tags, { Name = var.state_machine_name })
+  tags = merge(var.tags, { 
+    Name        = var.state_machine_name
+    Component   = "Orchestrator"
+    StepFunctionType = "Express"
+  })
 }
 
-############################
+
 # Outputs
-############################
-output "state_machine_arn"  { value = aws_sfn_state_machine.this.arn }
-output "role_arn"           { value = var.existing_role_arn }
-output "log_group_arn_used" { value = var.existing_log_group_arn }
+
+
+output "state_machine_arn" { value = aws_sfn_state_machine.this.arn }
+output "state_machine_name" { value = aws_sfn_state_machine.this.name }
