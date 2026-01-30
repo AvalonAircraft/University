@@ -1,8 +1,17 @@
+terraform {
+  required_version = ">= 1.5"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
 provider "aws" {
   region = var.region
 }
-
-data "aws_region" "current" {}
 
 locals {
   svc_prefix = "com.amazonaws.${var.region}"
@@ -20,7 +29,7 @@ locals {
   ]
 
   effective_interface_endpoints = (
-    var.interface_endpoints == null || length(var.interface_endpoints) == 0
+    length(var.interface_endpoints) == 0
   ) ? local.default_interface_endpoints : var.interface_endpoints
 
   effective_vpce_ingress_cidrs = (
@@ -54,7 +63,7 @@ module "vpc" {
   interface_endpoints               = local.effective_interface_endpoints
   vpce_security_group_ingress_cidrs = local.effective_vpce_ingress_cidrs
 
-  # Optional: Flow Logs durchreichen
+  # Optional: Flow Logs
   enable_flow_logs         = var.enable_flow_logs
   flow_logs_traffic_type   = var.flow_logs_traffic_type
   flow_logs_log_group_name = var.flow_logs_log_group_name
