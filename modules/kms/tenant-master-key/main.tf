@@ -1,6 +1,5 @@
-############################
 # Module: kms/tenant-master-key
-############################
+
 
 terraform {
   required_version = ">= 1.6.0"
@@ -12,12 +11,38 @@ terraform {
   }
 }
 
-############################
+
+# Environment
+
+
+data "aws_caller_identity" "current" {}
+data "aws_region"          "current" {}
+data "aws_partition"       "current" {}
+
+locals {
+  account_id = data.aws_caller_identity.current.account_id
+  region     = data.aws_region.current.name
+  partition  = data.aws_partition.current.partition
+
+  tenant_role_arn = "arn:${local.partition}:iam::${local.account_id}:role/${var.tenant_role_name}"
+
+  # Hilfskonstrukte für dynamische Statements
+  admin_statement = var.admin_role_arn != "" ? [1] : []
+  ses_statement   = var.attach_ses_statement ? [1] : []
+}
+
+
 # Inputs
-############################
+
+
 variable "alias_name" {
   description = "KMS Alias (ohne 'alias/'), z.B. 'kms-tenant-master-key'"
   type        = string
+
+  validation {
+    condition     = length(var.alias_name) > 0 && !can(regex("^alias/", var.alias_name))
+    error_message = "Bitte nur den reinen Alias ohne 'alias/' angeben (z.B. 'kms-tenant-master-key')."
+  }
 }
 
 variable "description" {
@@ -68,55 +93,15 @@ variable "tags" {
   default     = {}
 }
 
-############################
-# Environment
-############################
-data "aws_caller_identity" "current" {}
-data "aws_region"          "current" {}
-data "aws_partition"       "current" {}
 
-locals {
-  account_id  = data.aws_caller_identity.current.account_id
-  region      = data.aws_region.current.name
-  partition   = data.aws_partition.current.partition
-
-  tenant_role_arn = "arn:${local.partition}:iam::${local.account_id}:role/${var.tenant_role_name}"
-
-  admin_statement = var.admin_role_arn != "" ? [{
-    sid     = "Allow access for Key Administrators"
-    actions = [
-      "kms:Encrypt","kms:Decrypt","kms:GenerateDataKey","kms:DescribeKey",
-      "kms:Create*","kms:Describe*","kms:Enable*","kms:List*","kms:Put*",
-      "kms:Update*","kms:Revoke*","kms:Disable*","kms:Get*","kms:Delete*",
-      "kms:TagResource","kms:UntagResource","kms:ScheduleKeyDeletion",
-      "kms:CancelKeyDeletion","kms:ReplicateKey","kms:UpdatePrimaryRegion","kms:RotateKeyOnDemand"
-    ]
-    principals = [{ type = "AWS", identifiers = [var.admin_role_arn] }]
-  }] : []
-
-  ses_statement = var.attach_ses_statement ? [{
-    sid        = "AllowSESUse"
-    actions    = ["kms:Encrypt","kms:GenerateDataKey"]
-    principals = [{ type = "Service", identifiers = ["ses.amazonaws.com"] }]
-  }] : []
-}
-
-############################
-# Validations
-############################
-validation {
-  condition     = length(var.alias_name) > 0 && !can(regex("^alias/", var.alias_name))
-  error_message = "Bitte nur den reinen Alias ohne 'alias/' angeben (z.B. 'kms-tenant-master-key')."
-}
-
-############################
 # Key Policy
-############################
+
+
 data "aws_iam_policy_document" "this" {
-  # Root
+  # Root-Permissions (erlaubt IAM-Policies den Zugriff zu steuern)
   statement {
-    sid     = "Enable IAM User Permissions"
-    effect  = "Allow"
+    sid    = "EnableIAMUserPermissions"
+    effect = "Allow"
     actions = ["kms:*"]
     principals {
       type        = "AWS"
@@ -125,31 +110,38 @@ data "aws_iam_policy_document" "this" {
     resources = ["*"]
   }
 
-  # Optional Admin
+  # Optionaler Key Administrator
   dynamic "statement" {
     for_each = local.admin_statement
     content {
-      sid     = statement.value.sid
-      effect  = "Allow"
-      actions = statement.value.actions
+      sid    = "AllowAccessForKeyAdministrators"
+      effect = "Allow"
+      actions = [
+        "kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey",
+        "kms:Create*", "kms:Describe*", "kms:Enable*", "kms:List*", "kms:Put*",
+        "kms:Update*", "kms:Revoke*", "kms:Disable*", "kms:Get*", "kms:Delete*",
+        "kms:TagResource", "kms:UntagResource", "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion", "kms:ReplicateKey", "kms:UpdatePrimaryRegion", 
+        "kms:RotateKeyOnDemand"
+      ]
       principals {
-        type        = statement.value.principals[0].type
-        identifiers = statement.value.principals[0].identifiers
+        type        = "AWS"
+        identifiers = [var.admin_role_arn]
       }
       resources = ["*"]
     }
   }
 
-  # SES (optional, streng auf SourceAccount + optional SourceArn)
+  # SES Statement (für eingehende/ausgehende verschlüsselte Mails)
   dynamic "statement" {
     for_each = local.ses_statement
     content {
-      sid     = statement.value.sid
-      effect  = "Allow"
-      actions = statement.value.actions
+      sid    = "AllowSESUse"
+      effect = "Allow"
+      actions = ["kms:Encrypt", "kms:GenerateDataKey"]
       principals {
-        type        = statement.value.principals[0].type
-        identifiers = statement.value.principals[0].identifiers
+        type        = "Service"
+        identifiers = ["ses.amazonaws.com"]
       }
       resources = ["*"]
 
@@ -170,11 +162,16 @@ data "aws_iam_policy_document" "this" {
     }
   }
 
-  # TenantRole (tag-gebunden)
+  # Tenant-Isolierung: Zugriff nur für Rollen mit korrektem Tenant-Tag
   statement {
-    sid     = "AllowTenantAccess"
-    effect  = "Allow"
-    actions = ["kms:Encrypt","kms:Decrypt","kms:GenerateDataKey","kms:DescribeKey"]
+    sid    = "AllowTenantAccess"
+    effect = "Allow"
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:GenerateDataKey",
+      "kms:DescribeKey"
+    ]
     principals {
       type        = "AWS"
       identifiers = [local.tenant_role_arn]
@@ -188,14 +185,15 @@ data "aws_iam_policy_document" "this" {
   }
 }
 
-############################
+
 # KMS Key + Alias
-############################
+
+
 resource "aws_kms_key" "this" {
-  description         = var.description
-  multi_region        = var.enable_multi_region
-  enable_key_rotation = true
-  policy              = data.aws_iam_policy_document.this.json
+  description             = var.description
+  multi_region            = var.enable_multi_region
+  enable_key_rotation     = true
+  policy                  = data.aws_iam_policy_document.this.json
 
   tags = merge(var.tags, {
     Name  = var.alias_name
@@ -208,9 +206,10 @@ resource "aws_kms_alias" "this" {
   target_key_id = aws_kms_key.this.key_id
 }
 
-############################
+
 # Outputs
-############################
+
+
 output "key_id"     { value = aws_kms_key.this.key_id }
 output "key_arn"    { value = aws_kms_key.this.arn }
 output "alias_arn"  { value = aws_kms_alias.this.arn }
