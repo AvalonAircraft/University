@@ -1,57 +1,63 @@
-data "aws_caller_identity" "current" {}
-data "aws_partition"       "current" {}
-data "aws_region"          "current" {}
+# Module: IAM-Lambda-Bedrock-Inference
 
-############################
+
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0.0"
+    }
+  }
+}
+
+data "aws_partition" "current" {}
+data "aws_region"    "current" {}
+
+
 # Inputs
-############################
-variable "role_name"         { type = string }
-variable "role_path"         { type = string,  default = "/service-role/" }
-variable "policy_arns"       { type = list(string), default = [] } # managed policies to attach
-variable "bedrock_model_arn" { type = string } # arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}::foundation-model/...
-variable "allow_streaming"   { type = bool, default = false }      # optional: InvokeModelWithResponseStream
-variable "tags"              { type = map(string),   default = {} }
 
-# Guards
 variable "role_name" {
-  type = string
-
+  type        = string
+  description = "Name der IAM Rolle für die Bedrock-Lambda"
   validation {
-    condition     = length(var.role_name) > 0
+    condition     = length(trim(var.role_name, " ")) > 0
     error_message = "role_name darf nicht leer sein."
   }
 }
 
+variable "role_path"   { type = string, default = "/service-role/" }
+variable "policy_arns" { type = list(string), default = [] }
+variable "tags"        { type = map(string), default = {} }
 
 variable "bedrock_model_arn" {
-  type = string
+  type        = string
+  description = "Die vollständige ARN des Bedrock Foundation Models"
+}
 
-  validation {
-    condition = can(
-      regex(
-        "^arn:${data.aws_partition.current.partition}:bedrock:${data.aws_region.current.name}::foundation-model/.+$",
-        var.bedrock_model_arn
-      )
-    )
-    error_message = "bedrock_model_arn muss ein Foundation-Model-ARN der aktuellen Partition/Region sein."
-  }
+variable "allow_streaming" {
+  type        = bool
+  default     = false
+  description = "Aktiviert 'bedrock:InvokeModelWithResponseStream'"
 }
 
 
-############################
-# Trust policy (Lambda)
-############################
+# Trust Policy (Lambda)
+
 data "aws_iam_policy_document" "trust_lambda" {
   statement {
     effect = "Allow"
-    principals { type = "Service", identifiers = ["lambda.amazonaws.com"] }
-    actions    = ["sts:AssumeRole"]
+    principals { 
+      type        = "Service" 
+      identifiers = ["lambda.amazonaws.com"] 
+    }
+    actions = ["sts:AssumeRole"]
   }
 }
 
-############################
+
 # IAM Role
-############################
+
 resource "aws_iam_role" "this" {
   name               = var.role_name
   path               = var.role_path
@@ -59,42 +65,38 @@ resource "aws_iam_role" "this" {
   tags               = var.tags
 }
 
-############################
-# Attach managed policies (customer- oder aws-managed)
-############################
+
+# Managed Policy Attachments
+
 resource "aws_iam_role_policy_attachment" "attached" {
   for_each   = toset(var.policy_arns)
   role       = aws_iam_role.this.name
   policy_arn = each.value
 }
 
-############################
-# Inline policy: Bedrock InvokeModel (+ optional streaming)
-############################
-locals {
-  bedrock_actions = concat(
-    ["bedrock:InvokeModel"],
-    var.allow_streaming ? ["bedrock:InvokeModelWithResponseStream"] : []
-  )
-}
 
-data "aws_iam_policy_document" "titan_model" {
+# Inline Policy: Bedrock Access
+
+data "aws_iam_policy_document" "bedrock_invocation" {
   statement {
-    sid       = "AllowInvokeBedrockModel"
-    effect    = "Allow"
-    actions   = local.bedrock_actions
+    sid    = "AllowInvokeBedrockModel"
+    effect = "Allow"
+    actions = compact([
+      "bedrock:InvokeModel",
+      var.allow_streaming ? "bedrock:InvokeModelWithResponseStream" : ""
+    ])
     resources = [var.bedrock_model_arn]
   }
 }
 
-resource "aws_iam_role_policy" "titan_model" {
-  name   = "titan_model"
+resource "aws_iam_role_policy" "bedrock_invocation" {
+  name   = "BedrockModelAccess"
   role   = aws_iam_role.this.id
-  policy = data.aws_iam_policy_document.titan_model.json
+  policy = data.aws_iam_policy_document.bedrock_invocation.json
 }
 
-############################
+
 # Outputs
-############################
+
 output "role_name" { value = aws_iam_role.this.name }
-output "role_arn"  { value = aws_iam_role.this.arn  }
+output "role_arn"  { value = aws_iam_role.this.arn }
