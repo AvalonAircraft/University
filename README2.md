@@ -126,7 +126,7 @@ aws sts get-caller-identity
 
 ---
 
-### A) ORG/ADMIN-ONLY (nur falls du wirklich Organizations/Billing/SSO zentral aufsetzen willst)
+### A) ORG/ADMIN-ONLY 
 
 **1)** `stacks/organizations`  
 **2)** `stacks/org-billing`  
