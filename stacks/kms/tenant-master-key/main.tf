@@ -14,5 +14,12 @@ module "tenant_master_kms" {
   tags = var.tags
 }
 
-output "tenant_master_key_arn"   { value = module.tenant_master_kms.key_arn }
-output "tenant_master_alias_arn" { value = module.tenant_master_kms.alias_arn }
+output "tenant_master_key_arn" {
+  value       = module.tenant_master_kms.key_arn
+  description = "ARN of the tenant master KMS key"
+}
+
+output "tenant_master_alias_arn" {
+  value       = module.tenant_master_kms.alias_arn
+  description = "ARN of the KMS alias for the tenant master key"
+}
