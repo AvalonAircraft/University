@@ -137,14 +137,14 @@ aws sts get-caller-identity
 **Variante 1 (empfohlen):** `stacks/network`  
 **Variante 2:** `stacks/vpc` **->** `stacks/security_groups`  
 
-### C) [CORE](https://www.google.com/search?q=%23core)
+### C) [CORE]
 
 **5)** `stacks/iam` (Rollen & ABAC Setup) 
 **6)** `stacks/kms/tenant-master-key`  
 **7)** `stacks/s3` (optional/empfohlen)  
 **8)** `stacks/aurora-mysql` (optional)  
 
-### D) [OPTIONAL](https://www.google.com/search?q=%23optional)
+### D) [OPTIONAL]
 
 **9)** `stacks/nlb`  # Nur wenn ecs genutzt wird
 **10)** `stacks/ecr` 
@@ -459,7 +459,7 @@ echo "ECR_URI=$ECR_URI"
 > [!IMPORTANT]
 > WICHTIG:
 
-* **Für Uni/Professor-Deploy ohne Docker:** Nutze **Option A (Public Image)** → kein ECR/Docker nötig.
+* **Für Deploy ohne Docker:** Nutze **Option A (Public Image)** → kein ECR/Docker nötig.
 * **Wenn du dein eigenes Image willst:** Nutze **Option B (ECR + Docker Build/Push)**.
 
 ### 14.1 Option A: Deploy OHNE Docker (Public Image)
@@ -757,6 +757,3 @@ terraform -chdir=stacks/network destroy
 
 ```
 
----
-
-Möchtest du, dass ich dir als nächsten Schritt ein automatisiertes **Main-Deploy-Skript** erstelle, das all diese Variablen-Übergaben zwischen den Stacks für dich übernimmt?
