@@ -1,15 +1,24 @@
-############################
+# modules/ecs-service/main.tf
+
+
+# Environment
+
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+
+
 # Inputs
-############################
-variable "cluster_name"   { type = string }
-variable "service_name"   { type = string }
+
+variable "cluster_name" { type = string }
+variable "service_name" { type = string }
 
 # Task Definition
-variable "task_family"    { type = string, default = "" }   # z.B. "fargate-agent-task"
-variable "cpu"            { type = number }                 # 256, 512, 1024, 2048, 4096, 8192 (Fargate-Valid)
-variable "memory"         { type = number }                 # 512..30720 (abhängig von CPU)
+variable "task_family" { type = string, default = "" }
+variable "cpu" { type = number }    # z.B. 256
+variable "memory" { type = number } # z.B. 512
 variable "container_name" { type = string }
-variable "container_image"{ type = string }
+variable "container_image" { type = string }
 variable "container_port" { type = number, default = 8080 }
 
 # Env (Container)
@@ -19,40 +28,34 @@ variable "container_environment" {
 }
 
 # Networking
-variable "subnet_ids"        { type = list(string) }  # private Subnets empfohlen
-variable "security_group_id" { type = string }        # z.B. sg-xxxx (ecs-fargate)
-variable "assign_public_ip"  { type = bool, default = false }
+variable "subnet_ids" { type = list(string) }
+variable "security_group_id" { type = string }
+variable "assign_public_ip" { type = bool, default = false }
 
 # Load Balancer
-variable "target_group_arn" { type = string }         # ARN der NLB Target Group (TCP:port)
+variable "target_group_arn" { type = string }
 
 # CloudWatch Logs
-variable "log_group_name"     { type = string, default = "/ecs/service" }
+variable "log_group_name" { type = string, default = "/ecs/service" }
 variable "log_retention_days" { type = number, default = 14 }
 
-# Optional: vorhandene Rollen wiederverwenden
-variable "task_role_arn"      { type = string, default = "" }
+# Optional: Rollen-ARNs
+variable "task_role_arn" { type = string, default = "" }
 variable "execution_role_arn" { type = string, default = "" }
 
 variable "tags" { type = map(string), default = {} }
 
-############################
-# Environment
-############################
-data "aws_region"           "current" {}
-data "aws_caller_identity"  "current" {}
-data "aws_partition"        "current" {}
+
+# Locals & Container Def
 
 locals {
-  # Wenn keine ARNs übergeben werden, nutzen wir die erzeugten Rollen (Index 0)
-  effective_task_role_arn      = var.task_role_arn      != "" ? var.task_role_arn      : aws_iam_role.task[0].arn
+  effective_task_role_arn      = var.task_role_arn != "" ? var.task_role_arn : aws_iam_role.task[0].arn
   effective_execution_role_arn = var.execution_role_arn != "" ? var.execution_role_arn : aws_iam_role.execution[0].arn
 
-  # Container-Definition als JSON
   container_def = [{
-    name       = var.container_name
-    image      = var.container_image
-    essential  = true
+    name      = var.container_name
+    image     = var.container_image
+    essential = true
 
     portMappings = [{
       containerPort = var.container_port
@@ -68,36 +71,35 @@ locals {
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        awslogs-group         = var.log_group_name
-        awslogs-region        = data.aws_region.current.name
-        awslogs-stream-prefix = "ecs"
-        awslogs-create-group  = "false"
+        "awslogs-group"         = var.log_group_name
+        "awslogs-region"        = data.aws_region.current.name
+        "awslogs-stream-prefix" = "ecs"
+        "awslogs-create-group"  = "false"
       }
     }
   }]
 }
 
-############################
+
 # CloudWatch Logs
-############################
+
 resource "aws_cloudwatch_log_group" "this" {
   name              = var.log_group_name
   retention_in_days = var.log_retention_days
   tags              = var.tags
 }
 
-############################
+
 # ECS Cluster
-############################
+
 resource "aws_ecs_cluster" "this" {
   name = var.cluster_name
   tags = var.tags
 }
 
-############################
-# IAM (optional erzeugen)
-############################
-# Task Role (App-Rechte)
+
+# IAM Roles
+
 data "aws_iam_policy_document" "task_assume" {
   statement {
     effect = "Allow"
@@ -116,7 +118,6 @@ resource "aws_iam_role" "task" {
   tags               = var.tags
 }
 
-# Execution Role (Pull from ECR, Push Logs, Get Secrets etc.)
 resource "aws_iam_role" "execution" {
   count              = var.execution_role_arn == "" ? 1 : 0
   name               = "${var.service_name}-exec-role"
@@ -124,16 +125,17 @@ resource "aws_iam_role" "execution" {
   tags               = var.tags
 }
 
-# Managed Policy für Execution Role
 resource "aws_iam_role_policy_attachment" "execution_managed" {
   count      = var.execution_role_arn == "" ? 1 : 0
   role       = aws_iam_role.execution[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-############################
-# Task Definition (Fargate)
-############################
+
+# Task Definition
+
+
+
 resource "aws_ecs_task_definition" "this" {
   family                   = var.task_family != "" ? var.task_family : "${var.service_name}-task"
   network_mode             = "awsvpc"
@@ -160,9 +162,9 @@ resource "aws_ecs_task_definition" "this" {
   ]
 }
 
-############################
-# Service (Fargate + NLB TargetGroup)
-############################
+
+# ECS Service
+
 resource "aws_ecs_service" "this" {
   name             = var.service_name
   cluster          = aws_ecs_cluster.this.id
@@ -195,13 +197,11 @@ resource "aws_ecs_service" "this" {
   }
 
   tags = var.tags
-
-  depends_on = [aws_ecs_task_definition.this]
 }
 
-############################
+
 # Outputs
-############################
+
 output "cluster_arn"         { value = aws_ecs_cluster.this.arn }
 output "service_arn"         { value = aws_ecs_service.this.arn }
 output "task_definition_arn" { value = aws_ecs_task_definition.this.arn }
