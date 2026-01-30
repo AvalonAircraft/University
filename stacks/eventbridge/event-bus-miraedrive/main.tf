@@ -1,21 +1,29 @@
+# EventBridge Bus: MiraeDrive
+
+
 module "event_bus_miraedrive" {
   source = "../../../modules/eventbridge/event-bus-miraedrive"
 
-  bus_name = "event-bus-miraedrive"
+  # name sollte variabel sein, aber default kannst du trotzdem setzen
+  bus_name = var.bus_name
   tags     = var.tags
 
   # CloudWatch Logs
   create_error_log_group = var.create_error_log_group
-  log_group_name_error   = "/aws/vendedlogs/events/event-bus/event-bus-miraedrive"
+  log_group_name_error   = var.log_group_name_error
 
-  # S3 ERROR Logging
+  # S3 ERROR Logging (portable: nur wenn enabled=true UND bucket gesetzt)
   enable_s3_error_logging = var.enable_s3_error_logging
   s3_bucket_name          = var.s3_bucket_name
-  s3_prefix               = "AWSLogs"
-  s3_error_folder         = "EventBusLogs"
+  s3_prefix               = var.s3_prefix
+  s3_error_folder         = var.s3_error_folder
 
+  # Vorsicht PII
   include_execution_data  = var.include_execution_data
 }
+
+
+# Outputs
 
 output "event_bus_name" { value = module.event_bus_miraedrive.event_bus_name }
 output "event_bus_arn"  { value = module.event_bus_miraedrive.event_bus_arn }
