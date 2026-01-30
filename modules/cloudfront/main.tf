@@ -9,33 +9,33 @@ variable "acm_certificate_arn_us_east_1" {
 variable "distributions" {
   description = "Map of CloudFront distributions to create."
   type = map(object({
-    aliases                    = list(string)           # ["miraedrive.com"], ["www.miraedrive.com"]
+    aliases                    = list(string)
     comment                    = optional(string)
-    price_class                = optional(string)       # PriceClass_All | PriceClass_200 | PriceClass_100
+    price_class                = optional(string)
     default_cache_policy_id    = optional(string)
     response_headers_policy_id = optional(string)
     waf_web_acl_arn            = optional(string)
     logging = optional(object({
-      bucket = string # "logs-bucket.s3.amazonaws.com"
+      bucket = string
       prefix = string
     }))
     origin = object({
-      domain_name  = string       # "bucket.s3.amazonaws.com" or "xxx.elb.amazonaws.com"
-      origin_id    = string
-      origin_type  = string       # "s3" | "custom"
-      origin_path  = optional(string)
+      domain_name = string
+      origin_id   = string
+      origin_type = string # "s3" | "custom"
+      origin_path = optional(string)
       custom_origin_config = optional(object({
         http_port              = number
         https_port             = number
-        origin_protocol_policy = string    # "http-only" | "https-only" | "match-viewer"
+        origin_protocol_policy = string
         origin_ssl_protocols   = list(string)
       }))
     })
-    viewer_protocol_policy = optional(string)       # "redirect-to-https" | "https-only" | "allow-all"
-    compress               = optional(bool)         # default true
-    minimum_ttl            = optional(number)       # default 0
-    default_ttl            = optional(number)       # default 86400
-    max_ttl                = optional(number)       # default 31536000
+    viewer_protocol_policy = optional(string)
+    compress               = optional(bool)
+    minimum_ttl            = optional(number)
+    default_ttl            = optional(number)
+    max_ttl                = optional(number)
   }))
 }
 
@@ -45,12 +45,12 @@ locals {
 }
 
 resource "aws_cloudfront_origin_access_control" "oac" {
-  for_each                           = { for k, d in var.distributions : k => d if d.origin.origin_type == "s3" }
-  name                               = "${each.key}-oac"
-  description                        = "OAC for ${each.key}"
-  origin_access_control_origin_type  = "s3"
-  signing_behavior                   = "always"
-  signing_protocol                   = "sigv4"
+  for_each                          = { for k, d in var.distributions : k => d if d.origin.origin_type == "s3" }
+  name                              = "${each.key}-oac"
+  description                       = "OAC for ${each.key}"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }
 
 resource "aws_cloudfront_distribution" "this" {
@@ -72,7 +72,7 @@ resource "aws_cloudfront_distribution" "this" {
     dynamic "s3_origin_config" {
       for_each = each.value.origin.origin_type == "s3" ? [1] : []
       content {
-        origin_access_identity = null # OAC statt OAI
+        origin_access_identity = "" # OAC wird genutzt, daher OAI leer lassen (Empty String ist sicherer als null)
       }
     }
 
