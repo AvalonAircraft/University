@@ -1,14 +1,35 @@
-############################
 # Module: kms/ecr-key
-############################
 
 
-############################
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+data "aws_partition" "current" {}
+
+locals {
+  account_id = data.aws_caller_identity.current.account_id
+  region     = data.aws_region.current.name
+  partition  = data.aws_partition.current.partition
+
+  # Für kms:ViaService – inkl. China/Gov mit dns_suffix
+  dns_suffix  = data.aws_partition.current.dns_suffix
+  via_service = "ecr.${local.region}.${local.dns_suffix}"
+
+  # Service Principal dynamisch
+  ecr_service_principal = "ecr.${local.dns_suffix}"
+}
+
+
 # Inputs
-############################
+
+
 variable "alias_name" {
   description = "KMS Alias (ohne 'alias/'), z.B. 'ECR_Key'"
   type        = string
+
+  validation {
+    condition     = length(var.alias_name) > 0 && !can(regex("^alias/", var.alias_name))
+    error_message = "Bitte nur den reinen Alias ohne 'alias/' angeben (z.B. 'ECR_Key')."
+  }
 }
 
 variable "description" {
@@ -18,8 +39,14 @@ variable "description" {
 }
 
 variable "repository_arn" {
-  description = "ARN des ECR-Repositories, z.B. arn:aws:ecr:us-east-1:123456789012:repository/tenant1/hr-agent"
+  description = "ARN des ECR-Repositories"
   type        = string
+
+  validation {
+    # Validiert, ob der ARN zur aktuellen Partition/Region passt
+    condition     = can(regex("^arn:aws[a-z-]*:ecr:[a-z0-9-]+:[0-9]{12}:repository/.+", var.repository_arn))
+    error_message = "repository_arn muss ein gültiger ECR Repository ARN sein."
+  }
 }
 
 variable "enable_multi_region" {
@@ -34,59 +61,15 @@ variable "tags" {
   default     = {}
 }
 
-############################
-# Data
-############################
-data "aws_caller_identity" "current" {}
-data "aws_region"          "current" {}
-data "aws_partition"       "current" {}
 
-locals {
-  account_id = data.aws_caller_identity.current.account_id
-  region     = data.aws_region.current.name
-  partition  = data.aws_partition.current.partition
-
-  # Für kms:ViaService – inkl. China/Gov mit dns_suffix
-  dns_suffix = data.aws_partition.current.dns_suffix
-  via_service = "ecr.${local.region}.${local.dns_suffix}"   # z.B. ecr.us-east-1.amazonaws.com
-
-  # Service Principal dynamisch (aws -> ecr.amazonaws.com, aws-cn -> ecr.amazonaws.com.cn, ...)
-  ecr_service_principal = "ecr.${local.dns_suffix}"
-}
-
-############################
-# Validations
-############################
-variable "alias_name" {
-  description = "KMS Alias (ohne 'alias/'), z.B. 'ECR_Key'"
-  type        = string
-
-  validation {
-    condition     = length(var.alias_name) > 0 && !can(regex("^alias/", var.alias_name))
-    error_message = "Bitte nur den reinen Alias ohne 'alias/' angeben (z.B. 'ECR_Key')."
-  }
-}
-
-
-variable "repository_arn" {
-  description = "ARN des ECR-Repositories, z.B. arn:aws:ecr:us-east-1:123456789012:repository/tenant1/hr-agent"
-  type        = string
-
-  validation {
-    condition     = can(regex("^arn:${local.partition}:ecr:${local.region}:[0-9]{12}:repository/.+", var.repository_arn))
-    error_message = "repository_arn muss ein gültiger ECR Repository ARN in der aktuellen Partition/Region sein."
-  }
-}
-
-
-############################
 # Key Policy (ECR-narrow)
-############################
+
+
 data "aws_iam_policy_document" "this" {
   # Root permissions
   statement {
-    sid     = "EnableIAMUserPermissions"
-    effect  = "Allow"
+    sid    = "EnableIAMUserPermissions"
+    effect = "Allow"
     actions = ["kms:*"]
     principals {
       type        = "AWS"
@@ -97,12 +80,12 @@ data "aws_iam_policy_document" "this" {
 
   # ECR Describe Key
   statement {
-    sid     = "AllowECRDescribeKey"
-    effect  = "Allow"
+    sid    = "AllowECRDescribeKey"
+    effect = "Allow"
     actions = ["kms:DescribeKey"]
     principals {
       type        = "Service"
-      identifiers = [local.ecr_service_principal]   # ecr.amazonaws.com / ecr.amazonaws.com.cn
+      identifiers = [local.ecr_service_principal]
     }
     resources = ["*"]
     condition {
@@ -114,9 +97,9 @@ data "aws_iam_policy_document" "this" {
 
   # ECR Grant Ops
   statement {
-    sid     = "AllowECRGrantOps"
-    effect  = "Allow"
-    actions = ["kms:CreateGrant","kms:RetireGrant"]
+    sid    = "AllowECRGrantOps"
+    effect = "Allow"
+    actions = ["kms:CreateGrant", "kms:RetireGrant"]
     principals {
       type        = "Service"
       identifiers = [local.ecr_service_principal]
@@ -139,11 +122,15 @@ data "aws_iam_policy_document" "this" {
     }
   }
 
-  # ECR Crypto – eng auf ein bestimmtes Repository (Encryption Context bindet das Repo)
+  # ECR Crypto (Eng an Encryption Context gebunden)
   statement {
-    sid     = "AllowECRCryptoForRepo"
-    effect  = "Allow"
-    actions = ["kms:Encrypt","kms:Decrypt","kms:GenerateDataKey*"]
+    sid    = "AllowECRCryptoForRepo"
+    effect = "Allow"
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:GenerateDataKey*"
+    ]
     principals {
       type        = "Service"
       identifiers = [local.ecr_service_principal]
@@ -167,14 +154,15 @@ data "aws_iam_policy_document" "this" {
   }
 }
 
-############################
+
 # KMS Key + Alias
-############################
+
+
 resource "aws_kms_key" "this" {
-  description         = var.description
-  multi_region        = var.enable_multi_region
-  enable_key_rotation = true
-  policy              = data.aws_iam_policy_document.this.json
+  description             = var.description
+  multi_region            = var.enable_multi_region
+  enable_key_rotation     = true
+  policy                  = data.aws_iam_policy_document.this.json
 
   tags = merge(var.tags, {
     Name  = var.alias_name
@@ -187,9 +175,10 @@ resource "aws_kms_alias" "this" {
   target_key_id = aws_kms_key.this.key_id
 }
 
-############################
+
 # Outputs
-############################
+
+
 output "key_id"     { value = aws_kms_key.this.key_id }
 output "key_arn"    { value = aws_kms_key.this.arn }
 output "alias_arn"  { value = aws_kms_alias.this.arn }
