@@ -14,7 +14,7 @@ module "lambda" {
   timeout                = var.timeout
   log_retention_days     = var.log_retention_days
 
-  #Modul erwartet Alias & SFN-Name
+  # Modul erwartet Alias & SFN-Name
   kms_key_alias      = var.kms_key_alias
   state_machine_name = var.state_machine_name
 
