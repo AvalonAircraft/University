@@ -1,50 +1,86 @@
-############################
 # Module: event-bus-miraedrive-2
-############################
+
+
 data "aws_caller_identity" "current" {}
-data "aws_region"          "current" {}
-data "aws_partition"       "current" {}
+data "aws_region" "current" {}
+data "aws_partition" "current" {}
 
-############################
+
 # Inputs
-############################
-variable "bus_name"  { type = string, default = "event-bus-miraedrive-2" }
-variable "tags"      { type = map(string), default = {} }
 
-# StepFunctions Target
-variable "step_function_arn" { type = string }
 
-# Schema discovery (ermöglicht die verwaltete Schemas-Rule)
-variable "enable_schema_discovery" { type = bool, default = true }
+variable "bus_name" {
+  type    = string
+  default = "event-bus-miraedrive-2"
+}
 
-# CloudWatch Logs (ERROR)
-variable "create_error_log_group" { type = bool,   default = true }
-variable "log_group_name_error"   { type = string, default = "/aws/vendedlogs/events/event-bus/event-bus-miraedrive-2" }
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
 
-# S3 ERROR logging via CloudWatch Logs Delivery
-variable "enable_s3_error_logging" { type = bool,   default = true }
-variable "s3_bucket_name"          { type = string, default = "miraedrive-assets" }
-variable "s3_prefix"               { type = string, default = "AWSLogs" }
-variable "s3_error_folder"         { type = string, default = "EventBusLogs" }
+variable "step_function_arn" {
+  description = "ARN of the target Step Function"
+  type        = string
+}
 
-# Optional: Execution data (Request/Response payloads – Achtung PII)
-variable "include_execution_data"  { type = bool, default = false }
+variable "enable_schema_discovery" {
+  type    = bool
+  default = true
+}
+
+variable "create_error_log_group" {
+  type    = bool
+  default = true
+}
+
+variable "log_group_name_error" {
+  type    = string
+  default = "/aws/vendedlogs/events/event-bus/event-bus-miraedrive-2"
+}
+
+variable "enable_s3_error_logging" {
+  type    = bool
+  default = true
+}
+
+variable "s3_bucket_name" {
+  type    = string
+  default = "miraedrive-assets"
+}
+
+variable "s3_prefix" {
+  type    = string
+  default = "AWSLogs"
+}
+
+variable "s3_error_folder" {
+  type    = string
+  default = "EventBusLogs"
+}
+
+variable "include_execution_data" {
+  type    = bool
+  default = false
+}
 
 locals {
   tags = var.tags
 }
 
-############################
+
 # Event Bus
-############################
+
+
 resource "aws_cloudwatch_event_bus" "this" {
   name = var.bus_name
   tags = merge(local.tags, { Name = var.bus_name })
 }
 
-############################
+
 # (Optional) Schema Discovery
-############################
+
+
 resource "aws_schemas_discoverer" "this" {
   count       = var.enable_schema_discovery ? 1 : 0
   source_arn  = aws_cloudwatch_event_bus.this.arn
@@ -52,9 +88,10 @@ resource "aws_schemas_discoverer" "this" {
   tags        = merge(local.tags, { Name = "${var.bus_name}-schemas" })
 }
 
-############################
+
 # Rule → Step Functions (To_StepFunction)
-############################
+
+
 resource "aws_cloudwatch_event_rule" "to_sfn" {
   name           = "To_StepFunction"
   description    = "Route EmailAnalyzed events from app.email-agent to StepFunctions"
@@ -72,8 +109,11 @@ resource "aws_cloudwatch_event_rule" "to_sfn" {
 data "aws_iam_policy_document" "target_assume" {
   statement {
     effect = "Allow"
-    principals { type = "Service", identifiers = ["events.amazonaws.com"] }
-    actions   = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+    actions = ["sts:AssumeRole"]
   }
 }
 
@@ -85,8 +125,8 @@ resource "aws_iam_role" "events_to_sfn_role" {
 
 data "aws_iam_policy_document" "events_to_sfn_policy" {
   statement {
-    effect   = "Allow"
-    actions  = ["states:StartExecution"]
+    effect    = "Allow"
+    actions   = ["states:StartExecution"]
     resources = [var.step_function_arn]
   }
 }
@@ -104,9 +144,10 @@ resource "aws_cloudwatch_event_target" "to_sfn" {
   role_arn       = aws_iam_role.events_to_sfn_role.arn
 }
 
-############################
+
 # CloudWatch Log Group (ERROR)
-############################
+
+
 resource "aws_cloudwatch_log_group" "error" {
   count             = var.create_error_log_group ? 1 : 0
   name              = var.log_group_name_error
@@ -114,10 +155,10 @@ resource "aws_cloudwatch_log_group" "error" {
   tags              = merge(local.tags, { Name = "${var.bus_name}-error-logs" })
 }
 
-############################
+
 # CloudWatch Logs Delivery → S3 (ERROR)
-# Hinweis: benötigt einen aktuellen AWS Provider (≈ v5.60+)
-############################
+
+
 resource "aws_cloudwatchlogs_delivery_destination" "s3_error" {
   count            = var.enable_s3_error_logging ? 1 : 0
   name             = "EventBusS3Destination-${var.bus_name}-ERROR"
@@ -150,7 +191,7 @@ resource "aws_cloudwatchlogs_delivery" "eventbridge_error_to_s3" {
 
   delivery_source_name     = aws_cloudwatchlogs_delivery_source.eventbridge_error[0].name
   delivery_destination_arn = aws_cloudwatchlogs_delivery_destination.s3_error[0].arn
-  record_fields            = ["timestamp","message","service","level","eventBusName","region","accountId"]
+  record_fields            = ["timestamp", "message", "service", "level", "eventBusName", "region", "accountId"]
 
   tags = merge(local.tags, { Name = "EventBusErrorDelivery-${var.bus_name}-toS3" })
 
@@ -160,13 +201,14 @@ resource "aws_cloudwatchlogs_delivery" "eventbridge_error_to_s3" {
   ]
 }
 
-############################
+
 # Outputs
-############################
-output "event_bus_name"  { value = aws_cloudwatch_event_bus.this.name }
-output "event_bus_arn"   { value = aws_cloudwatch_event_bus.this.arn }
-output "rule_to_sfn_arn" { value = aws_cloudwatch_event_rule.to_sfn.arn }
-output "target_role_arn" { value = aws_iam_role.events_to_sfn_role.arn }
+
+
+output "event_bus_name"   { value = aws_cloudwatch_event_bus.this.name }
+output "event_bus_arn"    { value = aws_cloudwatch_event_bus.this.arn }
+output "rule_to_sfn_arn"  { value = aws_cloudwatch_event_rule.to_sfn.arn }
+output "target_role_arn"  { value = aws_iam_role.events_to_sfn_role.arn }
 
 output "log_group_error_name" {
   value = var.create_error_log_group ? aws_cloudwatch_log_group.error[0].name : null
