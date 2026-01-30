@@ -746,14 +746,37 @@ terraform -chdir=stacks/ses apply
 ## 25) Destroy / Cleanup (umgekehrte Reihenfolge!)
 
 ---
+>[!IMPORTANT]
+Wichtig: Immer von **"oben"** nach **"unten"** destroyen, damit Dependencies sauber wegfallen.
 
-> [!IMPORTANT]
-> Wichtig: Immer von **"oben"** nach **"unten"** destroyen (Dependencies).
-
+**Beispiel (Workload):**  
 ```bash
 terraform -chdir=stacks/apigw destroy
-# ... (siehe Liste im ursprünglichen Dokument)
-terraform -chdir=stacks/network destroy
+for d in stacks/lambda/*; do [ -d "$d" ] && terraform -chdir="$d" destroy; done
+for d in stacks/stepfunctions/*; do [ -d "$d" ] && terraform -chdir="$d" destroy; done
+for d in stacks/eventbridge/*; do [ -d "$d" ] && terraform -chdir="$d" destroy; done
 
+terraform -chdir=stacks/ecs destroy
+terraform -chdir=stacks/ecr destroy
+terraform -chdir=stacks/nlb destroy
+terraform -chdir=stacks/aurora-mysql destroy
+terraform -chdir=stacks/s3 destroy
+terraform -chdir=stacks/kms/tenant-master-key destroy
+terraform -chdir=stacks/network destroy
+```
+>[!NOTE]
+(oder vpc + security_groups falls genutzt)
+
+**Domain:**  
+```bash
+terraform -chdir=stacks/cdn destroy
+terraform -chdir=stacks/ses destroy
+terraform -chdir=stacks/dns destroy
+```
+**Org/Admin:**  
+```bash
+terraform -chdir=stacks/iam-identity-center destroy
+terraform -chdir=stacks/org-billing destroy
+terraform -chdir=stacks/organizations destroy
 ```
 
