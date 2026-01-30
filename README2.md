@@ -1,7 +1,3 @@
-Hier ist dein vollständig ergänztes und korrigiertes README im `.md`-Format. Ich habe alle technischen Details (wie ABAC-Security, S3 EventBridge-Trigger und Logik-Fixes) präzise in deine bestehende Struktur eingearbeitet, ohne Inhalte zu kürzen.
-
----
-
 # README.md — University Terraform (AWS) Full Deploy Guide
 
 Dieses Repo enthält mehrere Terraform-“Stacks” unter `stacks/` (jede Untermappe = eigenes Terraform Projekt)
